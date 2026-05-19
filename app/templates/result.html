@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Result{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>{% if mode == 'encrypt' %}Encryption{% else %}Decryption{% endif %} Result</h1>
+  {% if mode == 'encrypt' %}
+  <p><strong>Session ID:</strong> {{ session_id }}</p>
+  <label>Plaintext</label>
+  <pre>{{ plaintext }}</pre>
+  <label>Ciphertext (Base64)</label>
+  <pre class="mono">{{ ciphertext_b64 }}</pre>
+  <label>Session JSON (save for decryption)</label>
+  <pre class="mono small">{{ session_json }}</pre>
+  {% else %}
+  <label>Recovered plaintext</label>
+  <pre>{{ plaintext }}</pre>
+  {% endif %}
+  <a class="btn" href="{{ url_for('main.index') }}">Back home</a>
+</section>
+{% endblock %}

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Analysis{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Chat / Form Analysis</h1>
+  <p class="lead">Open the QBCAC dashboard for a session — side-by-side encryptor &amp; decryptor fingerprints with 32 minutiae overlays.</p>
+  <form method="post" class="form">
+    <label>Select session
+      <select name="session_id" required>
+        <option value="">— Choose —</option>
+        {% for s in sessions %}
+        <option value="{{ s.id }}">#{{ s.id }} — {{ s.label }} ({{ s.encryptor_name }})</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="btn primary">Open Dashboard</button>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Home{% endblock %}
+{% block content %}
+<section class="hero">
+  <h1>Quantum-Safe Biometric Security System</h1>
+  <p class="lead">Group encryption for up to {{ max_users }} people · decrypt anytime · manage session anytime · edit encrypted message within 5 minutes.</p>
+  <div class="actions">
+    <a class="btn primary" href="{{ url_for('main.encrypt_page') }}">Encrypt (Group)</a>
+    <a class="btn" href="{{ url_for('main.decrypt_page') }}">Decrypt</a>
+    <a class="btn" href="{{ url_for('main.analysis_page') }}">Session Analysis</a>
+  </div>
+</section>
+
+{% if sessions %}
+<section class="card">
+  <h2>Secure Sessions</h2>
+  <table>
+    <thead><tr><th>ID</th><th>Label</th><th>Encryptor</th><th>Decrypts</th><th>Actions</th></tr></thead>
+    <tbody>
+      {% for s in sessions %}
+      <tr>
+        <td>{{ s.id }}</td>
+        <td>{{ s.label }}</td>
+        <td>{{ s.encryptor_name }}</td>
+        <td>{{ s.decrypt_count or 0 }}</td>
+        <td>
+          <a href="{{ url_for('main.chat_page', session_id=s.id) }}">Chat</a> ·
+          <a href="{{ url_for('main.chat_analysis', session_id=s.id) }}">Dashboard</a> ·
+          <a href="{{ url_for('main.session_edit', session_id=s.id) }}">Manage</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+{% endblock %}

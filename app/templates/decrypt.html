@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Decrypt{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Group Decrypt</h1>
+  <p class="lead">
+    Up to {{ max_users }} people can decrypt each session — <strong>including the encryptor</strong>.
+    Decryption is available at any time. Use your enrolled name and fingerprint (and iris/face if enrolled).
+  </p>
+  <p class="hint bio-hint">Only valid <strong>fingerprint</strong>, <strong>iris</strong>, or <strong>face</strong> images are accepted. Screenshots and other files show <strong>Invalid input</strong>.</p>
+
+  <form method="post" enctype="multipart/form-data" class="form" id="decrypt-form">
+    <label>Session
+      <select name="session_id" id="session-select" required>
+        <option value="">— Select session —</option>
+        {% for s in sessions %}
+        <option value="{{ s.id }}">#{{ s.id }} — {{ s.label }} (encryptor: {{ s.encryptor_name }})</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <div id="authorized-panel" class="authorized-panel" hidden>
+      <h3>Authorized for this session</h3>
+      <ul id="authorized-list" class="authorized-chips"></ul>
+    </div>
+
+    <label>Your enrolled name<input type="text" name="decryptor_name" id="decryptor-name" required placeholder="Must match enrollment"></label>
+    <label>Fingerprint<input type="file" name="fingerprint" accept="image/*" required></label>
+    <label>Iris (optional — if enrolled)<input type="file" name="iris" accept="image/*"></label>
+    <label>Face (optional — if enrolled)<input type="file" name="face" accept="image/*"></label>
+    <button type="submit" class="btn primary">Decrypt</button>
+  </form>
+</section>
+
+<script>
+(function () {
+  const authorizedMap = {{ authorized_map | tojson }};
+  const select = document.getElementById("session-select");
+  const panel = document.getElementById("authorized-panel");
+  const list = document.getElementById("authorized-list");
+
+  function renderAuthorized(sessionId) {
+    list.innerHTML = "";
+    const people = authorizedMap[sessionId] || authorizedMap[String(sessionId)] || [];
+    if (!people.length) {
+      panel.hidden = true;
+      return;
+    }
+    panel.hidden = false;
+    people.forEach(function (p) {
+      const li = document.createElement("li");
+      li.className = "chip" + (p.is_encryptor ? " encryptor" : "");
+      li.textContent = p.name + (p.is_encryptor ? " (encryptor)" : "");
+      li.addEventListener("click", function () {
+        document.getElementById("decryptor-name").value = p.name;
+      });
+      list.appendChild(li);
+    });
+  }
+
+  select.addEventListener("change", function () {
+    if (select.value) renderAuthorized(parseInt(select.value, 10));
+    else panel.hidden = true;
+  });
+})();
+</script>
+{% endblock %}
+

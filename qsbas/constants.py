@@ -1,0 +1,7 @@
+"""System-wide biometric and session constants."""
+
+MINUTIAE_COUNT = 32
+MIN_GENUINE_MINUTIAE = 8
+MAX_AUTHORIZED_USERS = 5
+EDIT_WINDOW_SECONDS = 300  # 5 minutes
+BIOMETRIC_MATCH_RATIO = 0.45

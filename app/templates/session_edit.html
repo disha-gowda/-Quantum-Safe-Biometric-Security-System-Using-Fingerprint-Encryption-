@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Manage Session #{{ session_id }}{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Manage Session #{{ session_id }}</h1>
+  <p class="lead">{{ session.label }} · Encryptor: <strong>{{ session.encryptor_name }}</strong></p>
+  <p class="hint">
+    <strong>Session management</strong> (delete session, add or remove decryptors) is available
+    <strong>at any time</strong> for the encryptor.
+    To change the encrypted message text, use <a href="{{ url_for('main.chat_page', session_id=session_id) }}">Chat</a> —
+    that is limited to 5 minutes after encryption.
+  </p>
+
+  <form method="post" enctype="multipart/form-data" class="form verify-block">
+    <h2>Encryptor verification</h2>
+    <p class="hint">Verify once per action. No time limit for session management.</p>
+    <label>Your name (encryptor)<input type="text" name="encryptor_name" required value="{{ session.encryptor_name }}"></label>
+    <label>Fingerprint<input type="file" name="encryptor_fingerprint" accept="image/*" required></label>
+
+    <h2>Delete session</h2>
+    <p class="hint">Permanently removes session #{{ session_id }}, all participants, and decrypt history.</p>
+    <button type="submit" name="action" value="delete" class="btn danger" onclick="return confirm('Delete session #{{ session_id }} permanently?');">Delete session</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Manage decryptors ({{ participant_count }}/{{ max_users }})</h2>
+
+  {% if decryptors %}
+  <h3>Current decryptors</h3>
+  <ul class="decryptor-list">
+    {% for d in decryptors %}
+    <li>{{ d.name }}</li>
+    {% endfor %}
+  </ul>
+
+  <form method="post" enctype="multipart/form-data" class="form verify-block">
+    <h3>Remove decryptor</h3>
+    <label>Encryptor name<input type="text" name="encryptor_name" required value="{{ session.encryptor_name }}"></label>
+    <label>Encryptor fingerprint<input type="file" name="encryptor_fingerprint" accept="image/*" required></label>
+    <label>Select decryptor
+      <select name="remove_name" required>
+        {% for d in decryptors %}
+        <option value="{{ d.name }}">{{ d.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit" name="action" value="remove_decryptor" class="btn">Remove decryptor</button>
+  </form>
+  {% else %}
+  <p class="muted">No additional decryptors enrolled yet.</p>
+  {% endif %}
+
+  {% if participant_count < max_users %}
+  <form method="post" enctype="multipart/form-data" class="form verify-block">
+    <h3>Add decryptor</h3>
+    <label>Encryptor name<input type="text" name="encryptor_name" required value="{{ session.encryptor_name }}"></label>
+    <label>Encryptor fingerprint<input type="file" name="encryptor_fingerprint" accept="image/*" required></label>
+    <label>New decryptor name<input type="text" name="decryptor_name" required></label>
+    <label>New decryptor fingerprint<input type="file" name="decryptor_fingerprint" accept="image/*" required></label>
+    <label>Iris (optional)<input type="file" name="decryptor_iris" accept="image/*"></label>
+    <label>Face (optional)<input type="file" name="decryptor_face" accept="image/*"></label>
+    <button type="submit" name="action" value="add_decryptor" class="btn primary">Add decryptor</button>
+  </form>
+  {% else %}
+  <p class="muted">Session is at the maximum of {{ max_users }} authorized users.</p>
+  {% endif %}
+</section>
+
+<div class="actions">
+  <a class="btn" href="{{ url_for('main.index') }}">Back to sessions</a>
+  <a class="btn" href="{{ url_for('main.chat_page', session_id=session_id) }}">Open chat</a>
+</div>
+{% endblock %}

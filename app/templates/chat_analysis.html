@@ -1,0 +1,294 @@
+{% extends "base.html" %}
+
+{% block title %}QBCAC Analysis #{{ session_id }}{% endblock %}
+
+{% block main_class %}dashboard-main{% endblock %}
+
+{% block head %}
+
+<link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+
+{% endblock %}
+
+{% block content %}
+
+<div class="dashboard">
+
+  <header class="dash-header">
+
+    <div>
+
+      <h1>QBCAC DASHBOARD</h1>
+
+      <p class="dash-sub">SECURE SESSION #{{ session_id }} - {{ data.session.label }}</p>
+
+    </div>
+
+    <nav class="dash-status" aria-label="Quick links">
+
+      <a href="{{ url_for('main.chat_page', session_id=session_id) }}#message" class="pill live" title="Open live session chat">LIVE SESSION</a>
+
+      <a href="#quantum-info" class="pill quantum {{ 'ok' if quantum_ok else 'warn' }}" title="Quantum entropy source">
+
+        {{ 'QUANTUM STABLE' if quantum_ok else 'CLASSICAL FALLBACK' }}
+
+      </a>
+
+      <a href="#encryption-flow" class="pill bit" title="Encryption pipeline and key wrapping">256-BIT AES + QSBAC</a>
+
+    </nav>
+
+  </header>
+
+
+
+  <div class="dash-grid">
+
+    <section class="panel bio-panel" id="bio-encryptor">
+
+      <h2>Biometric Acquisition - Encrypting Person</h2>
+
+      {% if encryptor_panel %}
+
+      <div class="bio-split">
+
+        <div class="bio-visual">
+
+          <img src="data:image/png;base64,{{ encryptor_panel.image_b64 }}" alt="Encryptor fingerprint with 32 minutiae">
+
+        </div>
+
+        <div class="bio-stats">
+
+          <div class="stat"><span>Minutiae</span><strong>{{ encryptor_panel.minutiae_count }}</strong></div>
+
+          <div class="stat"><span>Quality</span><strong>{{ encryptor_panel.quality }}%</strong></div>
+
+          <div class="stat"><span>Name</span><strong>{{ encryptor_panel.name }}</strong></div>
+
+          <div class="stat"><span>Iris</span><strong>{{ "YES" if encryptor_panel.has_iris else "-" }}</strong></div>
+
+          <div class="stat"><span>Face</span><strong>{{ "YES" if encryptor_panel.has_face else "-" }}</strong></div>
+
+          {% if encryptor_panel.iris_b64 or encryptor_panel.face_b64 %}
+
+          <div class="multimodal-thumbs">
+
+            {% if encryptor_panel.iris_b64 %}
+
+            <figure><img src="data:image/png;base64,{{ encryptor_panel.iris_b64 }}" alt="Iris"><figcaption>Iris</figcaption></figure>
+
+            {% endif %}
+
+            {% if encryptor_panel.face_b64 %}
+
+            <figure><img src="data:image/png;base64,{{ encryptor_panel.face_b64 }}" alt="Face"><figcaption>Face</figcaption></figure>
+
+            {% endif %}
+
+          </div>
+
+          {% endif %}
+
+          <p class="hash-label">Biometric Hash (H)</p>
+
+          <code class="hash-val">{{ encryptor_panel.hash_hex }}</code>
+
+        </div>
+
+      </div>
+
+      {% endif %}
+
+    </section>
+
+
+
+    <section class="panel bio-panel" id="bio-decryptors">
+
+      <h2>Authorized Decryptors</h2>
+
+      {% if decryptor_panels %}
+
+      <div class="decryptor-grid">
+
+        {% for panel in decryptor_panels %}
+
+        <article class="decryptor-card">
+
+          <h3>{{ panel.name }}</h3>
+
+          <div class="bio-split compact">
+
+            <div class="bio-visual">
+
+              <img src="data:image/png;base64,{{ panel.image_b64 }}" alt="{{ panel.name }} fingerprint minutiae">
+
+            </div>
+
+            <div class="bio-stats">
+
+              <div class="stat"><span>Minutiae</span><strong>{{ panel.minutiae_count }}</strong></div>
+
+              <div class="stat"><span>Quality</span><strong>{{ panel.quality }}%</strong></div>
+
+            </div>
+
+          </div>
+
+        </article>
+
+        {% endfor %}
+
+      </div>
+
+      {% else %}
+
+      <p class="muted">No decryptors enrolled. Use <a href="{{ url_for('main.session_edit', session_id=session_id) }}">Edit session</a> to add decryptors.</p>
+
+      {% endif %}
+
+    </section>
+
+
+
+    <section class="panel flow-panel" id="encryption-flow">
+
+      <h2>Adaptive Encryption Process</h2>
+
+      <p class="file-tag">Session #{{ session_id }} - {{ data.session.label }}</p>
+
+      <div class="pipeline">
+
+        <div class="pipe-step"><span>PERMUTATION</span></div>
+
+        <span class="pipe-arrow">-></span>
+
+        <div class="pipe-step"><span>ROTATION</span></div>
+
+        <span class="pipe-arrow">-></span>
+
+        <div class="pipe-step"><span>DIFFUSION</span></div>
+
+        <span class="pipe-arrow">-></span>
+
+        <div class="pipe-step"><span>S-BOX</span></div>
+
+      </div>
+
+      <ul class="authorized-list">
+
+        <li><strong>Authorized encryptor:</strong> {{ encryptor_name }}</li>
+
+      </ul>
+
+
+
+      <h3 class="section-sub">Decryption history</h3>
+
+      {% if data.decrypt_events %}
+
+      <table class="decrypt-table">
+
+        <thead>
+
+          <tr><th>Decryptor</th><th>Time</th></tr>
+
+        </thead>
+
+        <tbody>
+
+          {% for d in data.decrypt_events %}
+
+          <tr>
+
+            <td>{{ d.decryptor_name }}</td>
+
+            <td><time>{{ d.decrypted_at }}</time></td>
+
+          </tr>
+
+          {% endfor %}
+
+        </tbody>
+
+      </table>
+
+      {% else %}
+
+      <p class="muted">No decryptions yet. Anyone authorized can decrypt at any time.</p>
+
+      {% endif %}
+
+
+
+      <div class="quantum-info-box" id="quantum-info">
+
+        <strong>Quantum entropy:</strong>
+
+        {% if quantum_ok %}
+
+        Qiskit Aer simulator active - Hadamard superposition seeds the chaotic logistic map.
+
+        {% else %}
+
+        Qiskit not installed - OS cryptographic randomness used as fallback (see requirements.txt).
+
+        {% endif %}
+
+      </div>
+
+    </section>
+
+
+
+    <section class="panel telemetry-panel" id="telemetry">
+
+      <h2>System Telemetry &amp; Security</h2>
+
+      <div class="telemetry-grid">
+
+        <div class="tel-stat"><span>Avalanche (NPCR)</span><strong>{{ "%.2f"|format(npcr_val) }}%</strong></div>
+
+        <div class="tel-stat"><span>Entropy</span><strong>{{ "%.4f"|format(entropy) }} bits/byte</strong></div>
+
+        <div class="tel-stat"><span>UACI</span><strong>{{ "%.2f"|format(uaci_val) }}%</strong></div>
+
+        <div class="tel-stat"><span>NIST Pass</span><strong>{{ "%.0f"|format(nist_pass_rate) }}%</strong></div>
+
+      </div>
+
+      <div class="bar-chart">
+
+        {% for i in range(24) %}
+
+        <div class="bar" style="height: {{ 30 + (i * 7) % 70 }}%"></div>
+
+        {% endfor %}
+
+      </div>
+
+      <p class="auth-tag">AUTHENTICITY: TIMESTAMPED - STRESS: LOW</p>
+
+    </section>
+
+  </div>
+
+
+
+  <div class="dash-actions">
+
+    <a href="{{ url_for('main.chat_page', session_id=session_id) }}" class="dash-btn">BACK TO CHAT</a>
+
+    <a href="{{ url_for('main.decrypt_page') }}" class="dash-btn accent">DECRYPT FILE</a>
+
+    <a href="{{ url_for('main.session_edit', session_id=session_id) }}" class="dash-btn">MANAGE SESSION</a>
+
+    <a href="{{ url_for('main.encrypt_page') }}" class="dash-btn">NEW ENCRYPT</a>
+
+  </div>
+
+</div>
+
+{% endblock %}
+

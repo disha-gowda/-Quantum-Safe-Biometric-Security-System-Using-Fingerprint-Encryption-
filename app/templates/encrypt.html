@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Encrypt{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='encrypt-form.css') }}">
+{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Group Encrypt</h1>
+  <p class="lead">
+    Up to <strong>{{ max_users }} people total</strong> can decrypt — <strong>you (encryptor)</strong> are always included,
+    plus up to <strong>{{ max_users - 1 }}</strong> teammates via <strong>+</strong>.
+  </p>
+  <p class="hint bio-hint">
+    <strong>32 minutiae</strong> are extracted from each fingerprint. Optional <strong>iris</strong> and <strong>face</strong>
+    strengthen multimodal enrollment. Screenshots and non-biometric images are rejected with <strong>Invalid input</strong>.
+  </p>
+
+  <form method="post" enctype="multipart/form-data" class="form" id="encrypt-form">
+    <input type="hidden" name="decryptor_slots" id="decryptor-slots" value="">
+    <label>Session label<input type="text" name="label" value="secure-chat"></label>
+    <label>Message<textarea name="plaintext" rows="4" required placeholder="Secret message..."></textarea></label>
+
+    <fieldset class="user-block encryptor-block">
+      <legend>Encrypting person (you — can also decrypt)</legend>
+      <p class="hint">Your fingerprint enrolls you as decryptor #1 of {{ max_users }}.</p>
+      <label>Name<input type="text" name="encryptor_name" required placeholder="Your name"></label>
+      <label>Fingerprint (required)<input type="file" name="encryptor_fingerprint" accept="image/*" required></label>
+      <label>Iris / eye photo (optional)<input type="file" name="encryptor_iris" accept="image/*"></label>
+      <label>Face photo (optional)<input type="file" name="encryptor_face" accept="image/*"></label>
+    </fieldset>
+
+    <div class="decryptors-header">
+      <h2 class="section-title">Additional authorized decryptors (optional)</h2>
+      <button type="button" class="btn-add-decryptor" id="btn-add-decryptor" title="Add decryptor">
+        <span class="plus-icon">+</span> Add decryptor
+      </button>
+    </div>
+    <p class="hint" id="decryptor-hint">No extra decryptors yet. You alone can decrypt, or click + to add teammates (max {{ max_users - 1 }}).</p>
+    <div id="decryptors-container"></div>
+
+    <button type="submit" class="btn primary">Encrypt for group</button>
+  </form>
+</section>
+
+<template id="decryptor-block-template">
+  <fieldset class="user-block decryptor-block" data-slot="">
+    <legend class="decryptor-legend">Decryptor <span class="slot-num"></span></legend>
+    <button type="button" class="btn-remove-decryptor" title="Remove">×</button>
+    <label>Name<input type="text" class="input-name" placeholder="Team member name"></label>
+    <label>Fingerprint<input type="file" class="input-fp" accept="image/*"></label>
+    <label>Iris (optional)<input type="file" class="input-iris" accept="image/*"></label>
+    <label>Face (optional)<input type="file" class="input-face" accept="image/*"></label>
+  </fieldset>
+</template>
+
+<script>
+(function () {
+  const maxDecryptors = {{ max_users - 1 }};
+  const container = document.getElementById("decryptors-container");
+  const slotsInput = document.getElementById("decryptor-slots");
+  const addBtn = document.getElementById("btn-add-decryptor");
+  const hint = document.getElementById("decryptor-hint");
+  const template = document.getElementById("decryptor-block-template");
+  let nextSlot = 0;
+  const activeSlots = [];
+
+  function updateSlotsInput() {
+    slotsInput.value = activeSlots.join(",");
+    hint.hidden = activeSlots.length > 0;
+    addBtn.disabled = activeSlots.length >= maxDecryptors;
+    addBtn.title = addBtn.disabled ? "Maximum decryptors reached" : "Add decryptor";
+  }
+
+  function wireNames(block, slot) {
+    block.querySelector(".input-name").name = "user" + slot + "_name";
+    block.querySelector(".input-fp").name = "user" + slot + "_fingerprint";
+    block.querySelector(".input-iris").name = "user" + slot + "_iris";
+    block.querySelector(".input-face").name = "user" + slot + "_face";
+  }
+
+  function addDecryptor() {
+    if (activeSlots.length >= maxDecryptors) return;
+    nextSlot += 1;
+    const slot = nextSlot;
+    activeSlots.push(slot);
+
+    const block = template.content.cloneNode(true).querySelector("fieldset");
+    block.dataset.slot = String(slot);
+    block.querySelector(".slot-num").textContent = String(activeSlots.length);
+    wireNames(block, slot);
+
+    block.querySelector(".btn-remove-decryptor").addEventListener("click", function () {
+      const idx = activeSlots.indexOf(slot);
+      if (idx !== -1) activeSlots.splice(idx, 1);
+      block.remove();
+      container.querySelectorAll(".decryptor-block").forEach(function (el, i) {
+        el.querySelector(".slot-num").textContent = String(i + 1);
+      });
+      updateSlotsInput();
+    });
+
+    container.appendChild(block);
+    updateSlotsInput();
+  }
+
+  addBtn.addEventListener("click", addDecryptor);
+  updateSlotsInput();
+})();
+</script>
+{% endblock %}

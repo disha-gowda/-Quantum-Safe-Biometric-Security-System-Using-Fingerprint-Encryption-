@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Secure Chat #{{ session_id }}{% endblock %}
+{% block content %}
+<section class="card chat-header">
+  <div class="chat-meta">
+    <h1>{{ data.session.label }} <span class="badge">#{{ session_id }}</span></h1>
+    <p>Encryptor: <strong>{{ data.session.encryptor_name }}</strong> ·
+      Authorized: {% for p in data.participants %}{{ p.name }}{% if not loop.last %}, {% endif %}{% endfor %}</p>
+  </div>
+  <div class="chat-actions">
+    <a class="btn" href="{{ url_for('main.session_edit', session_id=session_id) }}">Manage session</a>
+    <a class="btn" href="{{ url_for('main.chat_analysis', session_id=session_id) }}">Dashboard</a>
+    <a class="btn" href="{{ url_for('main.decrypt_page') }}">Decrypt</a>
+  </div>
+</section>
+
+<section class="card message-thread" id="message">
+  <h2>Message</h2>
+  <div class="message-bubble current">
+    <p>{{ data.session.current_plaintext }}</p>
+    {% if data.edits %}<span class="edited-tag">edited</span>{% endif %}
+  </div>
+  {% for e in data.edits %}
+  <div class="edit-history instagram-style">
+    <p class="edit-label">Edited · {{ e.edited_at }}</p>
+    <p class="old-text"><s>{{ e.old_text }}</s></p>
+    <p class="new-text">{{ e.new_text }}</p>
+  </div>
+  {% endfor %}
+</section>
+
+<section class="card">
+  <h2>Who decrypted</h2>
+  {% if data.decrypt_events %}
+  <ul class="decrypt-list">
+    {% for d in data.decrypt_events %}
+    <li>
+      <span class="avatar">{{ d.decryptor_name[0] }}</span>
+      {{ d.decryptor_name }}
+      <time>{{ d.decrypted_at }}</time>
+      <a class="link-small" href="{{ url_for('main.chat_analysis', session_id=session_id, decryptor=d.decryptor_name) }}">View analysis</a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">No decrypt events yet.</p>
+  {% endif %}
+</section>
+
+{% if editable %}
+<section class="card edit-panel">
+  <h2>Edit encrypted message <span class="timer">({{ seconds_left }}s left)</span></h2>
+  <p class="hint">Only the encryptor can change the message body, within 5 minutes of encryption. Session settings are not time-limited — use <a href="{{ url_for('main.session_edit', session_id=session_id) }}">Manage session</a>.</p>
+  <form method="post" action="{{ url_for('main.edit_message', session_id=session_id) }}" enctype="multipart/form-data" class="form">
+    <input type="hidden" name="encryptor_name" value="{{ data.session.encryptor_name }}">
+    <label>New message<textarea name="new_text" rows="3" required>{{ data.session.current_plaintext }}</textarea></label>
+    <label>Verify fingerprint<input type="file" name="fingerprint" accept="image/*" required></label>
+    <button type="submit" class="btn primary">Save message edit</button>
+  </form>
+</section>
+{% else %}
+<section class="card edit-panel closed">
+  <h2>Edit encrypted message</h2>
+  <p class="muted">The 5-minute window to edit the encrypted message has closed. Decryption still works anytime.</p>
+  <p class="muted">To delete this session or manage decryptors, use <a href="{{ url_for('main.session_edit', session_id=session_id) }}">Manage session</a> (no time limit).</p>
+</section>
+{% endif %}
+{% endblock %}

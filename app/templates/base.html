@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}QSBAC{% endblock %} | Quantum-Safe Biometric Cipher</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <header class="header">
+    <div class="container header-inner">
+      <a href="{{ url_for('main.index') }}" class="logo">QSBAC</a>
+      <nav>
+        <a href="{{ url_for('main.index') }}">Home</a>
+        <a href="{{ url_for('main.encrypt_page') }}">Encrypt</a>
+        <a href="{{ url_for('main.decrypt_page') }}">Decrypt</a>
+        <a href="{{ url_for('main.analysis_page') }}">Analysis</a>
+      </nav>
+    </div>
+  </header>
+  <main class="container {% block main_class %}{% endblock %}">
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <ul class="flash">
+          {% for msg in messages %}<li>{{ msg }}</li>{% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="footer">
+    <div class="container">Quantum-Safe Biometric Security System — Fingerprint-Driven Adaptive Encryption</div>
+  </footer>
+</body>
+</html>
