@@ -1,16 +1,29 @@
 {% extends "base.html" %}
 {% block title %}Unlock Chat #{{ session_id }}{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='biometric-upload.css') }}">
+{% endblock %}
 {% block content %}
 <section class="card">
-  <h1>Verify session encryptor</h1>
+  <h1>Verify encryptor biometrics</h1>
   <p class="lead">
-    Session <strong>#{{ session_id }}</strong> ({{ label }}) — created by <strong>{{ encryptor_name }}</strong>.
-    Upload the <strong>encryptor's fingerprint</strong> to open this chat. The message stays hidden until a valid authorized user decrypts with their own fingerprint.
+    Session <strong>#{{ session_id }}</strong> ({{ label }}) — encryptor <strong>{{ encryptor_name }}</strong>.
+    Upload the <strong>same biometrics</strong> you used when encrypting (fingerprint required; iris/face if enrolled).
+    After verification, the message is shown and you may edit it within <strong>5 minutes</strong>.
   </p>
-  <form method="post" enctype="multipart/form-data" class="form">
-    <label>Encryptor fingerprint<input type="file" name="fingerprint" accept="image/*" required></label>
-    <button type="submit" class="btn primary">Unlock chat</button>
+  <form method="post" enctype="multipart/form-data" class="form" id="unlock-form">
+    {% with container_id='bio-unlock', title='Encryptor biometrics', name_prefix='encryptor_' %}
+    {% include '_biometric_picker.html' %}
+    {% endwith %}
+    <button type="submit" class="btn primary">Verify &amp; open chat</button>
     <a class="btn" href="{{ url_for('main.index') }}">Cancel</a>
   </form>
 </section>
+<script src="{{ url_for('static', filename='biometric-picker.js') }}"></script>
+<script>
+initBiometricPicker("bio-unlock", "encryptor_", {
+  maxSlots: 3,
+  initialSlots: [{ type: "fingerprint", required: true }],
+});
+</script>
 {% endblock %}

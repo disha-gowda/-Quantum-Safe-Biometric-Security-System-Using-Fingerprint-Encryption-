@@ -9,7 +9,15 @@ from typing import List, Optional
 import numpy as np
 
 from qsbas.biometric_validation import BiometricValidationError, require_valid_file
-from qsbas.constants import BIOMETRIC_MATCH_RATIO, MINUTIAE_COUNT
+from qsbas.constants import (
+    BIOMETRIC_AMBIGUITY_GAP,
+    BIOMETRIC_DECRYPT_MIN_CIPHER,
+    BIOMETRIC_DECRYPT_MIN_HASH,
+    BIOMETRIC_DECRYPT_MIN_SPATIAL,
+    BIOMETRIC_MATCH_RATIO,
+    MINUTIAE_COUNT,
+    MINUTIAE_SPATIAL_TOLERANCE,
+)
 from qsbas.face import extract_face_features
 from qsbas.fingerprint import Minutia, extract_minutiae, load_fingerprint
 from qsbas.hashing import hash_minutiae, lightweight_hash
@@ -44,6 +52,14 @@ class BiometricProfile:
         for m in self.iris_minutiae + self.face_minutiae:
             hashes.append(lightweight_hash(m.x, m.y, m.theta))
         return "".join(f"{h:02x}" for h in hashes[:64])
+
+    def session_feature_hash_hex(self, session_id: int) -> str:
+        """Session-bound hash so the same biometrics show a different H per session."""
+        import hashlib
+
+        base = self.feature_hash_hex()
+        digest = hashlib.sha256(f"qsbas-session:{session_id}:{base}".encode()).hexdigest()
+        return digest
 
     def to_json(self) -> str:
         return json.dumps(
@@ -107,7 +123,9 @@ def build_profile(
     )
 
 
-def _minutiae_spatial_ratio(stored: List[Minutia], probe: List[Minutia], tolerance: float = 16.0) -> float:
+def _minutiae_spatial_ratio(
+    stored: List[Minutia], probe: List[Minutia], tolerance: float = MINUTIAE_SPATIAL_TOLERANCE
+) -> float:
     """Share of probe minutiae that align with a stored point (re-scan tolerant)."""
     probe_pts = probe[:MINUTIAE_COUNT]
     stored_pts = stored[:MINUTIAE_COUNT]
@@ -123,28 +141,61 @@ def _minutiae_spatial_ratio(stored: List[Minutia], probe: List[Minutia], toleran
     return hits / len(probe_pts)
 
 
-def biometric_features_match(stored: BiometricProfile, probe: BiometricProfile) -> bool:
-    """Compare fingerprint/multimodal features only (no name check)."""
+def biometric_match_components(
+    stored: BiometricProfile, probe: BiometricProfile
+) -> tuple[float, float, float | None]:
+    """Return (hash_ratio, spatial_ratio, cipher_ratio or None)."""
     stored_fp = stored.fingerprint_minutiae[:MINUTIAE_COUNT]
     probe_fp = probe.fingerprint_minutiae[:MINUTIAE_COUNT]
 
     stored_h = hash_minutiae(stored_fp)
     probe_h = hash_minutiae(probe_fp)
     hash_ratio = sum(1 for a, b in zip(stored_h, probe_h) if a == b) / max(len(stored_h), 1)
-
     spatial_ratio = _minutiae_spatial_ratio(stored_fp, probe_fp)
 
     probe_multimodal = bool(probe.iris_minutiae or probe.face_minutiae)
     stored_multimodal = bool(stored.iris_minutiae or stored.face_minutiae)
-    if probe_multimodal or stored_multimodal:
+    cipher_ratio: float | None = None
+    if probe_multimodal and stored_multimodal:
         cipher_stored = hash_minutiae(stored.cipher_minutiae)
         cipher_probe = hash_minutiae(probe.cipher_minutiae)
         cipher_ratio = sum(1 for a, b in zip(cipher_stored, cipher_probe) if a == b) / max(
             len(cipher_stored), 1
         )
-        return max(hash_ratio, cipher_ratio, spatial_ratio) >= BIOMETRIC_MATCH_RATIO
+    return hash_ratio, spatial_ratio, cipher_ratio
 
-    return max(hash_ratio, spatial_ratio) >= BIOMETRIC_MATCH_RATIO
+
+def biometric_match_score(stored: BiometricProfile, probe: BiometricProfile) -> float:
+    """Weighted similarity in [0, 1] — both hash and spatial must contribute."""
+    hash_ratio, spatial_ratio, cipher_ratio = biometric_match_components(stored, probe)
+    if cipher_ratio is not None:
+        return 0.30 * hash_ratio + 0.40 * spatial_ratio + 0.30 * cipher_ratio
+    return 0.50 * hash_ratio + 0.50 * spatial_ratio
+
+
+def verify_decrypt_authorization(stored: BiometricProfile, probe: BiometricProfile) -> None:
+    """Raise PermissionError unless probe strongly matches one enrolled profile."""
+    hash_ratio, spatial_ratio, cipher_ratio = biometric_match_components(stored, probe)
+    combined = biometric_match_score(stored, probe)
+
+    if hash_ratio < BIOMETRIC_DECRYPT_MIN_HASH or spatial_ratio < BIOMETRIC_DECRYPT_MIN_SPATIAL:
+        raise PermissionError(
+            "Fingerprint does not match any authorized profile for this session"
+        )
+    if cipher_ratio is not None and cipher_ratio < BIOMETRIC_DECRYPT_MIN_CIPHER:
+        raise PermissionError(
+            "Biometric mismatch: enrolled iris/face does not match your upload"
+        )
+    if combined < BIOMETRIC_MATCH_RATIO:
+        raise PermissionError("Fingerprint not recognized for this session")
+
+
+def biometric_features_match(stored: BiometricProfile, probe: BiometricProfile) -> bool:
+    try:
+        verify_decrypt_authorization(stored, probe)
+        return True
+    except PermissionError:
+        return False
 
 
 def profiles_match(stored: BiometricProfile, probe: BiometricProfile) -> bool:
@@ -161,11 +212,24 @@ def identify_participant(
 ) -> BiometricProfile:
     """Identify exactly one enrolled user from probe biometrics alone."""
     pool = [p for p in stored_profiles if not encryptor_only or p.is_encryptor]
-    matches = [p for p in pool if biometric_features_match(p, probe)]
-    if not matches:
+    if not pool:
         raise PermissionError("Fingerprint not recognized for this session")
-    if len(matches) > 1:
-        raise PermissionError(
-            "Fingerprint matches more than one enrolled user; re-enroll with distinct biometrics"
-        )
-    return matches[0]
+
+    scored = [(p, biometric_match_score(p, probe)) for p in pool]
+    scored.sort(key=lambda item: item[1], reverse=True)
+    best_profile, best_score = scored[0]
+
+    if best_score < BIOMETRIC_MATCH_RATIO:
+        raise PermissionError("Fingerprint not recognized for this session")
+
+    if len(scored) > 1:
+        second_score = scored[1][1]
+        if second_score >= BIOMETRIC_MATCH_RATIO and (
+            best_score - second_score
+        ) < BIOMETRIC_AMBIGUITY_GAP:
+            raise PermissionError(
+                "Fingerprint matches more than one enrolled user; re-enroll with distinct biometrics"
+            )
+
+    verify_decrypt_authorization(best_profile, probe)
+    return best_profile

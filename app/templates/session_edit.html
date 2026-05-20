@@ -1,25 +1,32 @@
 {% extends "base.html" %}
 {% block title %}Manage Session #{{ session_id }}{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='encrypt-form.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='biometric-upload.css') }}">
+{% endblock %}
 {% block content %}
 <section class="card">
   <h1>Manage Session #{{ session_id }}</h1>
   <p class="lead">{{ session.label }} · Encryptor: <strong>{{ session.encryptor_name }}</strong></p>
-  <p class="hint">
-    <strong>Session management</strong> (delete session, add or remove decryptors) is available
-    <strong>at any time</strong> for the encryptor.
-    To change the encrypted message text, use <a href="{{ url_for('main.chat_unlock', session_id=session_id) }}">Chat</a> —
-    that is limited to 5 minutes after encryption.
+  <p class="hint bio-hint">
+    <strong>Session management</strong> (delete, add/remove decryptors) is always available for the encryptor.
+    To change message text, use <a href="{{ url_for('main.chat_unlock', session_id=session_id) }}">Chat</a> —
+    within 5 minutes after encryption.
   </p>
 
-  <form method="post" enctype="multipart/form-data" class="form verify-block">
-    <h2>Encryptor verification</h2>
-    <p class="hint">Verify once per action. No time limit for session management.</p>
-    <label>Your name (encryptor)<input type="text" name="encryptor_name" required value="{{ session.encryptor_name }}"></label>
-    <label>Fingerprint<input type="file" name="encryptor_fingerprint" accept="image/*" required></label>
-
+  <form method="post" enctype="multipart/form-data" class="form" id="delete-form">
+    <fieldset class="user-block encryptor-block">
+      <legend>Encryptor verification</legend>
+      <p class="hint">Verify once per action. No time limit for session management.</p>
+      <label>Name<input type="text" name="encryptor_name" required value="{{ session.encryptor_name }}"></label>
+      {% with container_id='bio-verify-delete', title='Your biometrics', name_prefix='encryptor_' %}
+      {% include '_biometric_picker.html' %}
+      {% endwith %}
+    </fieldset>
     <h2>Delete session</h2>
     <p class="hint">Permanently removes session #{{ session_id }}, all participants, and decrypt history.</p>
-    <button type="submit" name="action" value="delete" class="btn danger" onclick="return confirm('Delete session #{{ session_id }} permanently?');">Delete session</button>
+    <button type="submit" name="action" value="delete" class="btn danger"
+      onclick="return confirm('Delete session #{{ session_id }} permanently?');">Delete session</button>
   </form>
 </section>
 
@@ -34,10 +41,15 @@
     {% endfor %}
   </ul>
 
-  <form method="post" enctype="multipart/form-data" class="form verify-block">
+  <form method="post" enctype="multipart/form-data" class="form" id="remove-decryptor-form">
+    <fieldset class="user-block encryptor-block">
+      <legend>Encryptor verification</legend>
+      <label>Name<input type="text" name="encryptor_name" required value="{{ session.encryptor_name }}"></label>
+      {% with container_id='bio-verify-remove', title='Your biometrics', name_prefix='encryptor_' %}
+      {% include '_biometric_picker.html' %}
+      {% endwith %}
+    </fieldset>
     <h3>Remove decryptor</h3>
-    <label>Encryptor name<input type="text" name="encryptor_name" required value="{{ session.encryptor_name }}"></label>
-    <label>Encryptor fingerprint<input type="file" name="encryptor_fingerprint" accept="image/*" required></label>
     <label>Select decryptor
       <select name="remove_name" required>
         {% for d in decryptors %}
@@ -52,14 +64,22 @@
   {% endif %}
 
   {% if participant_count < max_users %}
-  <form method="post" enctype="multipart/form-data" class="form verify-block">
-    <h3>Add decryptor</h3>
-    <label>Encryptor name<input type="text" name="encryptor_name" required value="{{ session.encryptor_name }}"></label>
-    <label>Encryptor fingerprint<input type="file" name="encryptor_fingerprint" accept="image/*" required></label>
-    <label>New decryptor name<input type="text" name="decryptor_name" required></label>
-    <label>New decryptor fingerprint<input type="file" name="decryptor_fingerprint" accept="image/*" required></label>
-    <label>Iris (optional)<input type="file" name="decryptor_iris" accept="image/*"></label>
-    <label>Face (optional)<input type="file" name="decryptor_face" accept="image/*"></label>
+  <form method="post" enctype="multipart/form-data" class="form" id="add-decryptor-form">
+    <fieldset class="user-block encryptor-block">
+      <legend>Encryptor verification</legend>
+      <label>Name<input type="text" name="encryptor_name" required value="{{ session.encryptor_name }}"></label>
+      {% with container_id='bio-verify-add', title='Your biometrics', name_prefix='encryptor_' %}
+      {% include '_biometric_picker.html' %}
+      {% endwith %}
+    </fieldset>
+
+    <fieldset class="user-block decryptor-block">
+      <legend>New decryptor</legend>
+      <label>Name<input type="text" name="decryptor_name" required placeholder="Team member name"></label>
+      {% with container_id='bio-new-decryptor', title='Decryptor biometrics', name_prefix='decryptor_' %}
+      {% include '_biometric_picker.html' %}
+      {% endwith %}
+    </fieldset>
     <button type="submit" name="action" value="add_decryptor" class="btn primary">Add decryptor</button>
   </form>
   {% else %}
@@ -67,8 +87,39 @@
   {% endif %}
 </section>
 
+<template id="bio-picker-shell-template">
+  <div class="bio-upload-section" data-max-slots="3">
+    <h3>Biometrics</h3>
+    <p class="bio-upload-hint">Select biometric type, then choose one file.</p>
+    <div class="bio-slots"></div>
+    <button type="button" class="btn-add-bio">+ Add biometric</button>
+    <div class="bio-type-pills"></div>
+  </div>
+</template>
+
 <div class="actions">
   <a class="btn" href="{{ url_for('main.index') }}">Back to sessions</a>
   <a class="btn" href="{{ url_for('main.chat_unlock', session_id=session_id) }}">Open chat</a>
 </div>
+
+<script src="{{ url_for('static', filename='biometric-picker.js') }}"></script>
+<script>
+(function () {
+  var pickers = [
+    { id: "bio-verify-delete", prefix: "encryptor_" },
+    { id: "bio-verify-remove", prefix: "encryptor_" },
+    { id: "bio-verify-add", prefix: "encryptor_" },
+    { id: "bio-new-decryptor", prefix: "decryptor_" }
+  ];
+  pickers.forEach(function (p) {
+    var el = document.getElementById(p.id);
+    if (el) {
+      initBiometricPicker(p.id, p.prefix, {
+        maxSlots: 3,
+        initialSlots: [{ type: "fingerprint", required: true }]
+      });
+    }
+  });
+})();
+</script>
 {% endblock %}

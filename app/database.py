@@ -24,6 +24,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
     cols = {r[1] for r in conn.execute("PRAGMA table_info(sessions)").fetchall()}
     if cols and "group_payload" not in cols:
         conn.execute("ALTER TABLE sessions RENAME TO sessions_legacy")
+    if cols and "original_plaintext" not in cols:
+        conn.execute("ALTER TABLE sessions ADD COLUMN original_plaintext TEXT")
 
 
 def init_db() -> None:
@@ -39,7 +41,8 @@ def init_db() -> None:
                 group_payload TEXT NOT NULL,
                 fp_encryptor_path TEXT,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                edit_deadline TEXT
+                edit_deadline TEXT,
+                original_plaintext TEXT
             );
 
             CREATE TABLE IF NOT EXISTS participants (
@@ -82,6 +85,7 @@ def save_group_session(
     group_payload_json: str,
     fp_encryptor_path: str,
     participants: List[dict],
+    original_plaintext: str | None = None,
 ) -> int:
     created = datetime.utcnow()
     deadline = created + timedelta(seconds=EDIT_WINDOW_SECONDS)
@@ -90,8 +94,8 @@ def save_group_session(
             """
             INSERT INTO sessions (
                 label, encryptor_name, current_plaintext, group_payload,
-                fp_encryptor_path, edit_deadline
-            ) VALUES (?, ?, ?, ?, ?, ?)
+                fp_encryptor_path, edit_deadline, original_plaintext
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 label,
@@ -100,6 +104,7 @@ def save_group_session(
                 group_payload_json,
                 fp_encryptor_path,
                 deadline.isoformat(),
+                original_plaintext,
             ),
         )
         session_id = int(cur.lastrowid)
@@ -185,8 +190,13 @@ def can_edit(session_id: int) -> bool:
     return datetime.utcnow() <= deadline
 
 
-def update_message(session_id: int, group_payload_json: str) -> None:
-    """Re-encrypt message; never persist decrypted plaintext."""
+def update_message(
+    session_id: int,
+    group_payload_json: str,
+    old_text: str,
+    new_text: str,
+) -> None:
+    """Re-encrypt message; store edit history (plaintext) for decrypt UI only."""
     with get_connection() as conn:
         conn.execute(
             "UPDATE sessions SET current_plaintext = NULL, group_payload = ? WHERE id = ?",
@@ -194,7 +204,7 @@ def update_message(session_id: int, group_payload_json: str) -> None:
         )
         conn.execute(
             "INSERT INTO message_edits (session_id, old_text, new_text) VALUES (?, ?, ?)",
-            (session_id, "[encrypted]", "[encrypted]"),
+            (session_id, old_text, new_text),
         )
         conn.commit()
 

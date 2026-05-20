@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}QBCAC Analysis #{{ session_id }}{% endblock %}
+{% block title %}QSBAC Analysis #{{ session_id }}{% endblock %}
 
 {% block main_class %}dashboard-main{% endblock %}
 
@@ -18,7 +18,7 @@
 
     <div>
 
-      <h1>QBCAC DASHBOARD</h1>
+      <h1>QSBAC DASHBOARD</h1>
 
       <p class="dash-sub">SECURE SESSION #{{ session_id }} - {{ data.session.label }}</p>
 
@@ -26,11 +26,7 @@
 
     <nav class="dash-status" aria-label="Quick links">
 
-      <a href="#quantum-info" class="pill quantum {{ 'ok' if quantum_ok else 'warn' }}" title="Quantum entropy source">
-
-        {{ 'QUANTUM STABLE' if quantum_ok else 'CLASSICAL FALLBACK' }}
-
-      </a>
+      <a href="#telemetry" class="pill bit" title="Session ciphertext metrics">SESSION #{{ session_id }} METRICS</a>
 
       <a href="#encryption-flow" class="pill bit" title="Encryption pipeline and key wrapping">256-BIT AES + QSBAC</a>
 
@@ -88,9 +84,9 @@
 
           {% endif %}
 
-          <p class="hash-label">Biometric Hash (H)</p>
+          <p class="hash-label">Biometric Hash (H) — 32 bytes</p>
 
-          <code class="hash-val">{{ encryptor_panel.hash_hex }}</code>
+          <code class="hash-val" title="Session-bound 32-byte digest (hex)">{{ encryptor_panel.hash_hex }}</code>
 
         </div>
 
@@ -220,22 +216,6 @@
 
 
 
-      <div class="quantum-info-box" id="quantum-info">
-
-        <strong>Quantum entropy:</strong>
-
-        {% if quantum_ok %}
-
-        Qiskit Aer simulator active - Hadamard superposition seeds the chaotic logistic map.
-
-        {% else %}
-
-        Qiskit not installed - OS cryptographic randomness used as fallback (see requirements.txt).
-
-        {% endif %}
-
-      </div>
-
     </section>
 
 
@@ -243,6 +223,9 @@
     <section class="panel telemetry-panel" id="telemetry">
 
       <h2>System Telemetry &amp; Security</h2>
+
+      <p class="file-tag">Live metrics · session #{{ session_id }} </p>
+      <p class="cipher-sample"><span>First 32 bytes (hex preview):</span> <code>{{ ciphertext_hex_32 }}</code></p>
 
       <div class="telemetry-grid">
 
@@ -258,15 +241,15 @@
 
       <div class="bar-chart">
 
-        {% for i in range(24) %}
+        {% for h in bar_heights %}
 
-        <div class="bar" style="height: {{ 30 + (i * 7) % 70 }}%"></div>
+        <div class="bar" style="height: {{ h }}%"></div>
 
         {% endfor %}
 
       </div>
 
-      <p class="auth-tag">AUTHENTICITY: TIMESTAMPED - STRESS: LOW</p>
+      <p class="auth-tag">SESSION CREATED: {{ session_created_ist }} · STRESS: {{ stress }}</p>
 
     </section>
 

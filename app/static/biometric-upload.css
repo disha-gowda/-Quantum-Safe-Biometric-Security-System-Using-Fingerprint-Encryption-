@@ -1,0 +1,141 @@
+.bio-upload-section {
+  margin: 0.75rem 0 1rem;
+  padding: 1rem 1.1rem;
+  border-radius: 12px;
+  border: 1px solid rgba(61, 214, 198, 0.25);
+  background: linear-gradient(145deg, rgba(12, 22, 42, 0.95), rgba(8, 14, 28, 0.98));
+}
+
+.bio-upload-section h3 {
+  margin: 0 0 0.35rem;
+  font-size: 0.95rem;
+  color: #7ee8ff;
+  font-weight: 600;
+}
+
+.bio-upload-hint {
+  margin: 0 0 0.85rem;
+  font-size: 0.8rem;
+  color: #8aa0c4;
+}
+
+.bio-slots {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.bio-slot {
+  display: grid;
+  grid-template-columns: 140px 1fr auto;
+  gap: 0.65rem;
+  align-items: center;
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid #2a4060;
+}
+
+.bio-slot .bio-type-select {
+  width: 100%;
+  padding: 0.45rem 0.5rem;
+  border-radius: 8px;
+  border: 1px solid #3a6090;
+  background: #0d1828;
+  color: #e8edf7;
+  font-size: 0.85rem;
+}
+
+.bio-slot .bio-file-wrap {
+  min-width: 0;
+}
+
+.bio-slot .bio-file-wrap {
+  display: block;
+}
+
+.bio-slot .bio-file-wrap input[type="file"] {
+  width: 100%;
+  font-size: 0.82rem;
+  color: #b8c8e0;
+}
+
+.bio-slot input[type="file"].bio-hidden-file {
+  display: none !important;
+}
+
+.bio-slot .btn-remove-bio {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid #5a3040;
+  background: #2a1520;
+  color: #ff8a9a;
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0;
+}
+
+.bio-slot .btn-remove-bio:hover {
+  background: #4a2030;
+}
+
+.bio-slot .btn-remove-bio[hidden] {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.btn-add-bio {
+  margin-top: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.85rem;
+  border: 1px dashed #3dd6c6;
+  border-radius: 8px;
+  background: rgba(61, 214, 198, 0.06);
+  color: #3dd6c6;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.btn-add-bio:hover:not(:disabled) {
+  background: rgba(61, 214, 198, 0.14);
+  border-style: solid;
+}
+
+.btn-add-bio:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.bio-type-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+.bio-type-pill {
+  font-size: 0.72rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid #3a6090;
+  color: #9ab8d4;
+}
+
+.bio-type-pill.done {
+  border-color: #3dd6c6;
+  color: #3dd6c6;
+  background: rgba(61, 214, 198, 0.1);
+}
+
+@media (max-width: 560px) {
+  .bio-slot {
+    grid-template-columns: 1fr;
+  }
+  .bio-slot .btn-remove-bio {
+    justify-self: end;
+  }
+}

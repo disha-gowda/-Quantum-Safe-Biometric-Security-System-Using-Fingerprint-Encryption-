@@ -81,6 +81,7 @@ def dashboard_biometric_panel(
     title: str,
     iris_path: str | None = None,
     face_path: str | None = None,
+    session_id: int | None = None,
 ) -> dict:
     image = load_fingerprint(fp_path)
     minutiae = profile.cipher_minutiae
@@ -89,10 +90,10 @@ def dashboard_biometric_panel(
         "name": profile.name,
         "minutiae_count": len(minutiae),
         "quality": round(quality_score(image), 1),
-        "hash_hex": profile.feature_hash_hex()[:64] + "...",
-        "image_b64": minutiae_overlay_base64(
-            image, minutiae, f"{title} - {len(minutiae)} minutiae"
-        ),
+        "hash_hex": (
+            profile.session_feature_hash_hex(session_id) if session_id else profile.feature_hash_hex()
+        )[:64],
+        "image_b64": minutiae_overlay_base64(image, minutiae, ""),
         "has_iris": len(profile.iris_minutiae) > 0,
         "has_face": len(profile.face_minutiae) > 0,
         "iris_b64": _image_to_b64(iris_path),

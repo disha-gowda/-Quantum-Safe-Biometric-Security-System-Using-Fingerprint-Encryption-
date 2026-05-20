@@ -2,6 +2,7 @@
 {% block title %}Encrypt{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='encrypt-form.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='biometric-upload.css') }}">
 {% endblock %}
 {% block content %}
 <section class="card">
@@ -24,9 +25,9 @@
       <legend>Encrypting person (you — can also decrypt)</legend>
       <p class="hint">Your fingerprint enrolls you as decryptor #1 of {{ max_users }}.</p>
       <label>Name<input type="text" name="encryptor_name" required placeholder="Your name"></label>
-      <label>Fingerprint (required)<input type="file" name="encryptor_fingerprint" accept="image/*" required></label>
-      <label>Iris / eye photo (optional)<input type="file" name="encryptor_iris" accept="image/*"></label>
-      <label>Face photo (optional)<input type="file" name="encryptor_face" accept="image/*"></label>
+      {% with container_id='bio-encryptor', title='Your biometrics', name_prefix='encryptor_' %}
+      {% include '_biometric_picker.html' %}
+      {% endwith %}
     </fieldset>
 
     <div class="decryptors-header">
@@ -47,12 +48,21 @@
     <legend class="decryptor-legend">Decryptor <span class="slot-num"></span></legend>
     <button type="button" class="btn-remove-decryptor" title="Remove">×</button>
     <label>Name<input type="text" class="input-name" placeholder="Team member name"></label>
-    <label>Fingerprint<input type="file" class="input-fp" accept="image/*"></label>
-    <label>Iris (optional)<input type="file" class="input-iris" accept="image/*"></label>
-    <label>Face (optional)<input type="file" class="input-face" accept="image/*"></label>
+    <div class="bio-picker-host"></div>
   </fieldset>
 </template>
 
+<template id="bio-picker-shell-template">
+  <div class="bio-upload-section" data-max-slots="3">
+    <h3>Biometrics</h3>
+    <p class="bio-upload-hint">Select biometric type, then choose one file.</p>
+    <div class="bio-slots"></div>
+    <button type="button" class="btn-add-bio">+ Add biometric</button>
+    <div class="bio-type-pills"></div>
+  </div>
+</template>
+
+<script src="{{ url_for('static', filename='biometric-picker.js') }}"></script>
 <script>
 (function () {
   const maxDecryptors = {{ max_users - 1 }};
@@ -64,6 +74,11 @@
   let nextSlot = 0;
   const activeSlots = [];
 
+  initBiometricPicker("bio-encryptor", "encryptor_", {
+    maxSlots: 3,
+    initialSlots: [{ type: "fingerprint", required: true }],
+  });
+
   function updateSlotsInput() {
     slotsInput.value = activeSlots.join(",");
     hint.hidden = activeSlots.length > 0;
@@ -73,9 +88,20 @@
 
   function wireNames(block, slot) {
     block.querySelector(".input-name").name = "user" + slot + "_name";
-    block.querySelector(".input-fp").name = "user" + slot + "_fingerprint";
-    block.querySelector(".input-iris").name = "user" + slot + "_iris";
-    block.querySelector(".input-face").name = "user" + slot + "_face";
+  }
+
+  function injectPicker(block, slot) {
+    const host = block.querySelector(".bio-picker-host");
+    const pickerId = "bio-decryptor-" + slot;
+    const shellTpl = document.getElementById("bio-picker-shell-template");
+    if (!shellTpl) return;
+    const section = shellTpl.content.cloneNode(true).querySelector(".bio-upload-section");
+    section.id = pickerId;
+    host.appendChild(section);
+    initBiometricPicker(pickerId, "user" + slot + "_", {
+      maxSlots: 3,
+      initialSlots: [{ type: "fingerprint", required: true }],
+    });
   }
 
   function addDecryptor() {
@@ -88,6 +114,7 @@
     block.dataset.slot = String(slot);
     block.querySelector(".slot-num").textContent = String(activeSlots.length);
     wireNames(block, slot);
+    injectPicker(block, slot);
 
     block.querySelector(".btn-remove-decryptor").addEventListener("click", function () {
       const idx = activeSlots.indexOf(slot);

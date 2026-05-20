@@ -9,7 +9,12 @@ from typing import List, Tuple
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from qsbas.biometric_profile import BiometricProfile, identify_participant, profiles_match
+from qsbas.biometric_profile import (
+    BiometricProfile,
+    identify_participant,
+    profiles_match,
+    verify_decrypt_authorization,
+)
 from qsbas.cipher import CipherSession, QSBACCipher
 from qsbas.constants import MAX_AUTHORIZED_USERS
 
@@ -116,8 +121,19 @@ def group_decrypt_by_fingerprint(
     *,
     encryptor_only: bool = False,
 ) -> tuple[bytes, str]:
-    """Decrypt by fingerprint only; system identifies the authorized user."""
+    """Decrypt only when probe matches exactly one enrolled authorized profile."""
     stored_profiles = [BiometricProfile.from_json(w.profile_json) for w in package.user_wraps]
     identified = identify_participant(stored_profiles, probe, encryptor_only=encryptor_only)
-    wrap = next(w for w in package.user_wraps if w.name.strip().lower() == identified.name.strip().lower())
-    return _unwrap_and_decrypt(package, wrap), identified.name
+    verify_decrypt_authorization(identified, probe)
+
+    wrap = next(
+        w
+        for w in package.user_wraps
+        if w.name.strip().lower() == identified.name.strip().lower()
+    )
+    try:
+        return _unwrap_and_decrypt(package, wrap), identified.name
+    except Exception as exc:
+        raise PermissionError(
+            "Fingerprint does not match any authorized profile for this session"
+        ) from exc

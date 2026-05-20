@@ -1,12 +1,49 @@
 {% extends "base.html" %}
 {% block title %}Decrypted — Session #{{ session_id }}{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='decrypt-result.css') }}">
+{% endblock %}
 {% block content %}
-<section class="card">
+<section class="card decrypt-result-card">
   <h1>Decryption successful</h1>
   <p class="lead">Recognized as <strong>{{ decryptor_name }}</strong> for session #{{ session_id }} ({{ label }}).</p>
-  <div class="message-bubble current">
-    <p>{{ message_plaintext }}</p>
+  <p class="decrypt-time"><time>{{ decrypted_at_ist }}</time></p>
+
+  <div class="message-versions">
+    <article class="message-bubble version current">
+      <header>
+        <span class="version-label">Current message</span>
+        <time>{{ decrypted_at_ist }}</time>
+      </header>
+      <p>{{ message_plaintext }}</p>
+    </article>
+
+    {% if original_message != message_plaintext or message_edits %}
+    <article class="message-bubble version original">
+      <header>
+        <span class="version-label">Original message</span>
+        <time>{{ session_created_ist }}</time>
+      </header>
+      <p>{{ original_message }}</p>
+    </article>
+    {% endif %}
+
+    {% if message_edits %}
+    <section class="edit-timeline">
+      <h2>Edit history</h2>
+      {% for e in message_edits %}
+      <div class="edit-entry">
+        <time>{{ e.edited_at }}</time>
+        <div class="edit-diff">
+          <p class="old-text"><span>Before:</span> {{ e.old_text }}</p>
+          <p class="new-text"><span>After:</span> {{ e.new_text }}</p>
+        </div>
+      </div>
+      {% endfor %}
+    </section>
+    {% endif %}
   </div>
+
   <p class="hint">This text is shown only in your browser session and is not stored as plaintext on the server.</p>
   <div class="actions">
     {% if is_encryptor %}

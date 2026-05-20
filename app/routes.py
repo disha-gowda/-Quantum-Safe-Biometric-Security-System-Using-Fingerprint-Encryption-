@@ -6,15 +6,12 @@ from datetime import datetime
 
 from flask import Blueprint, flash, jsonify, redirect, render_template, request, session, url_for
 
-from analysis.benchmarks import benchmark_aes, benchmark_chacha, benchmark_qsbac
-from analysis.nist_tests import run_nist_suite, suite_pass_rate
-from analysis.security_metrics import entropy_bits_per_byte, histogram_uniformity_score, npcr, uaci
 from app.database import (
     add_session_decryptor,
     can_edit,
     chat_payload,
     delete_session,
-    get_decrypt_events,
+    get_message_edits,
     get_participants,
     get_session,
     list_sessions,
@@ -26,6 +23,8 @@ from app.database import (
     verify_encryptor_fingerprint,
 )
 from app.services import dashboard_biometric_panel, probe_from_fingerprint, profile_from_form, save_upload
+from app.session_metrics import session_security_metrics
+from app.timefmt import format_ist, format_ist_list
 from qsbas.biometric_profile import BiometricProfile, build_profile
 from qsbas.biometric_validation import BiometricValidationError
 from qsbas.constants import EDIT_WINDOW_SECONDS, MAX_AUTHORIZED_USERS
@@ -37,6 +36,7 @@ bp = Blueprint("main", __name__)
 
 @bp.route("/")
 def index():
+    _clear_all_chat_access()
     sessions = list_sessions()
     return render_template("index.html", sessions=sessions, max_users=MAX_AUTHORIZED_USERS)
 
@@ -99,6 +99,7 @@ def encrypt_page():
             package.to_json(),
             enc_meta["fp_path"],
             participant_meta,
+            original_plaintext=plaintext,
         )
         session.pop(f"chat_unlock_{session_id}", None)
         session.pop(f"decrypted_{session_id}", None)
@@ -192,12 +193,20 @@ def decrypt_page():
             None,
         )
         is_encryptor = bool(identified_row and identified_row["is_encryptor"])
+        raw_edits = [dict(e) for e in get_message_edits(session_id)]
+        readable = _readable_edits(raw_edits)
+        original_message = _original_message_text(dict(row), readable, plaintext)
+        edits = format_ist_list(readable, "edited_at")
         return render_template(
             "decrypt_result.html",
             session_id=session_id,
             label=row["label"],
             decryptor_name=decryptor_name,
             message_plaintext=plaintext,
+            original_message=original_message,
+            message_edits=edits,
+            decrypted_at_ist=format_ist(datetime.utcnow()),
+            session_created_ist=format_ist(row["created_at"]),
             is_encryptor=is_encryptor,
         )
     except BiometricValidationError as exc:
@@ -241,14 +250,19 @@ def session_edit(session_id: int):
         return redirect(url_for("main.session_edit", session_id=session_id))
 
     try:
-        fp_path = save_upload(fp_file, "fp_verify")
-        if not verify_encryptor_fingerprint(session_id, fp_path):
+        iris_f = request.files.get("encryptor_iris")
+        face_f = request.files.get("encryptor_face")
+        probe, probe_paths = probe_from_fingerprint(
+            fp_file,
+            iris_f if iris_f and iris_f.filename else None,
+            face_f if face_f and face_f.filename else None,
+        )
+        if not verify_encryptor_fingerprint(session_id, probe_paths["fp_path"]):
             flash("Only the session encryptor can manage this session (fingerprint verification failed).")
             return redirect(url_for("main.session_edit", session_id=session_id))
 
         row = get_session(session_id)
         package = GroupEncryptedMessage.from_json(row["group_payload"])
-        probe = build_profile("_admin_", fp_path)
         admin_plaintext, _ = group_decrypt_by_fingerprint(package, probe, encryptor_only=True)
         admin_plain = admin_plaintext.decode("utf-8", errors="replace")
 
@@ -260,14 +274,16 @@ def session_edit(session_id: int):
         if action == "add_decryptor":
             new_name = request.form.get("decryptor_name", "").strip()
             new_fp = request.files.get("decryptor_fingerprint")
+            dec_iris = request.files.get("decryptor_iris")
+            dec_face = request.files.get("decryptor_face")
             if not new_name or not new_fp or not new_fp.filename:
                 flash("Decryptor name and fingerprint are required.")
                 return redirect(url_for("main.session_edit", session_id=session_id))
             profile, meta = profile_from_form(
                 new_name,
                 new_fp,
-                request.files.get("decryptor_iris"),
-                request.files.get("decryptor_face"),
+                dec_iris if dec_iris and dec_iris.filename else None,
+                dec_face if dec_face and dec_face.filename else None,
             )
             add_session_decryptor(session_id, {"name": new_name, **meta}, admin_plain)
             flash(f"Decryptor '{new_name}' added to session #{session_id}.")
@@ -299,6 +315,37 @@ def _decrypted_view(session_id: int) -> dict | None:
     return session.get(f"decrypted_{session_id}")
 
 
+def _clear_chat_access(session_id: int) -> None:
+    """Require fresh biometric decrypt before showing message content again."""
+    session.pop(f"chat_unlock_{session_id}", None)
+    session.pop(f"decrypted_{session_id}", None)
+
+
+def _clear_all_chat_access() -> None:
+    for key in list(session.keys()):
+        if key.startswith("chat_unlock_") or key.startswith("decrypted_"):
+            session.pop(key, None)
+
+
+def _readable_edits(edits: list[dict]) -> list[dict]:
+    return [
+        e
+        for e in edits
+        if e.get("old_text") not in ("[encrypted]", "", None)
+        and e.get("new_text") not in ("[encrypted]", "", None)
+    ]
+
+
+def _original_message_text(row: dict, edits: list[dict], current: str | None) -> str | None:
+    original = row.get("original_plaintext")
+    if original and original not in ("[encrypted]", ""):
+        return original
+    readable = _readable_edits(edits)
+    if readable:
+        return readable[0].get("old_text")
+    return current
+
+
 @bp.route("/chat/<int:session_id>/unlock", methods=["GET", "POST"])
 def chat_unlock(session_id: int):
     """Encryptor fingerprint gate before viewing session chat."""
@@ -308,8 +355,6 @@ def chat_unlock(session_id: int):
         return redirect(url_for("main.index"))
 
     if request.method == "GET":
-        if _chat_unlocked(session_id):
-            return redirect(url_for("main.chat_page", session_id=session_id))
         return render_template(
             "chat_unlock.html",
             session_id=session_id,
@@ -317,49 +362,87 @@ def chat_unlock(session_id: int):
             label=data["session"]["label"],
         )
 
-    fp_file = request.files.get("fingerprint")
+    fp_file = request.files.get("encryptor_fingerprint") or request.files.get("fingerprint")
     if not fp_file or not fp_file.filename:
         flash("Encryptor fingerprint is required to open this chat.")
         return redirect(url_for("main.chat_unlock", session_id=session_id))
 
     try:
-        fp_path = save_upload(fp_file, "fp_chat_unlock")
-        if not verify_encryptor_fingerprint(session_id, fp_path):
-            flash("Fingerprint does not match the session encryptor.")
+        iris_f = request.files.get("encryptor_iris") or request.files.get("iris")
+        face_f = request.files.get("encryptor_face") or request.files.get("face")
+        probe, _paths = probe_from_fingerprint(
+            fp_file,
+            iris_f if iris_f and iris_f.filename else None,
+            face_f if face_f and face_f.filename else None,
+        )
+        row = get_session(session_id)
+        package = GroupEncryptedMessage.from_json(row["group_payload"])
+        plaintext_bytes, decryptor_name = group_decrypt_by_fingerprint(
+            package, probe, encryptor_only=True
+        )
+        if decryptor_name.strip().lower() != row["encryptor_name"].strip().lower():
+            flash("Only the session encryptor can open this chat.")
             return redirect(url_for("main.chat_unlock", session_id=session_id))
+
+        plaintext = plaintext_bytes.decode("utf-8", errors="replace")
         session[f"chat_unlock_{session_id}"] = True
-        flash("Encryptor verified. Decrypt the message to read it.")
+        session[f"decrypted_{session_id}"] = {
+            "plaintext": plaintext,
+            "decryptor_name": decryptor_name,
+        }
+        log_decrypt(session_id, decryptor_name)
+        flash("Encryptor verified. Message unlocked.")
         return redirect(url_for("main.chat_page", session_id=session_id))
     except BiometricValidationError as exc:
         flash(str(exc))
+        return redirect(url_for("main.chat_unlock", session_id=session_id))
+    except PermissionError as exc:
+        flash(str(exc))
+        return redirect(url_for("main.chat_unlock", session_id=session_id))
+    except Exception as exc:
+        flash(f"Could not unlock chat: {exc}")
         return redirect(url_for("main.chat_unlock", session_id=session_id))
 
 
 @bp.route("/chat/<int:session_id>")
 def chat_page(session_id: int):
-    if not _chat_unlocked(session_id):
-        return redirect(url_for("main.chat_unlock", session_id=session_id))
-
     data = chat_payload(session_id)
     if not data:
         flash("Session not found.")
         return redirect(url_for("main.index"))
+    data["decrypt_events"] = format_ist_list(data["decrypt_events"], "decrypted_at")
+    data["edits"] = format_ist_list(data.get("edits", []), "edited_at")
     row = data["session"]
     editable = can_edit(session_id)
     seconds_left = 0
     if row.get("edit_deadline"):
         deadline = datetime.fromisoformat(row["edit_deadline"])
         seconds_left = max(0, int((deadline - datetime.utcnow()).total_seconds()))
+
     decrypted_view = _decrypted_view(session_id)
+    message_plaintext = None
+    decryptor_name = None
+    original_message = None
+    readable_edits = _readable_edits(data.get("edits", []))
+
+    if decrypted_view:
+        message_plaintext = decrypted_view["plaintext"]
+        decryptor_name = decrypted_view["decryptor_name"]
+        original_message = _original_message_text(row, readable_edits, message_plaintext)
+
     return render_template(
         "chat.html",
         session_id=session_id,
         data=data,
+        readable_edits=readable_edits if decrypted_view else [],
+        original_message=original_message,
         editable=editable,
         seconds_left=seconds_left,
         edit_window=EDIT_WINDOW_SECONDS,
-        message_plaintext=decrypted_view["plaintext"] if decrypted_view else None,
-        decryptor_name=decrypted_view["decryptor_name"] if decrypted_view else None,
+        message_plaintext=message_plaintext,
+        decryptor_name=decryptor_name,
+        session_created_ist=format_ist(row.get("created_at")),
+        message_locked=not bool(decrypted_view),
     )
 
 
@@ -379,27 +462,38 @@ def edit_message(session_id: int):
         return redirect(url_for("main.index"))
 
     new_text = request.form.get("new_text", "").strip()
-    fp_file = request.files.get("fingerprint")
+    fp_file = request.files.get("encryptor_fingerprint") or request.files.get("fingerprint")
     if not new_text or not fp_file or not fp_file.filename:
         flash("Encryptor fingerprint and new message are required.")
         return redirect(url_for("main.chat_page", session_id=session_id))
 
     try:
-        probe, _ = probe_from_fingerprint(fp_file)
+        iris_f = request.files.get("encryptor_iris") or request.files.get("iris")
+        face_f = request.files.get("encryptor_face") or request.files.get("face")
+        probe, _ = probe_from_fingerprint(
+            fp_file,
+            iris_f if iris_f and iris_f.filename else None,
+            face_f if face_f and face_f.filename else None,
+        )
         package_existing = GroupEncryptedMessage.from_json(row["group_payload"])
-        group_decrypt_by_fingerprint(package_existing, probe, encryptor_only=True)
+        plaintext_bytes, _ = group_decrypt_by_fingerprint(
+            package_existing, probe, encryptor_only=True
+        )
+        old_text = plaintext_bytes.decode("utf-8", errors="replace")
 
         participants_db = get_participants(session_id)
         profiles = [BiometricProfile.from_json(p["profile_json"]) for p in participants_db]
         package = group_encrypt(new_text.encode("utf-8"), profiles)
-        update_message(session_id, package.to_json())
-        session.pop(f"decrypted_{session_id}", None)
-        flash("Encrypted message updated. Decrypt again to view the new content.")
+        update_message(session_id, package.to_json(), old_text, new_text)
+        _clear_chat_access(session_id)
+        flash(
+            "Message updated and re-encrypted. Verify biometrics again to read the new content."
+        )
     except BiometricValidationError as exc:
         flash(str(exc))
     except Exception as exc:
         flash(f"Edit failed: {exc}")
-    return redirect(url_for("main.chat_page", session_id=session_id))
+    return redirect(url_for("main.chat_unlock", session_id=session_id))
 
 
 @bp.route("/chat/<int:session_id>/analysis")
@@ -425,6 +519,7 @@ def chat_analysis(session_id: int):
             "Encrypting Person",
             encryptor.get("iris_path"),
             encryptor.get("face_path"),
+            session_id=session_id,
         )
 
     decryptor_panels: list[dict] = []
@@ -439,6 +534,7 @@ def chat_analysis(session_id: int):
                 "Authorized Decryptor",
                 p.get("iris_path"),
                 p.get("face_path"),
+                session_id=session_id,
             )
         )
 
@@ -448,16 +544,18 @@ def chat_analysis(session_id: int):
             unique_decryptors.append(n)
 
     package = GroupEncryptedMessage.from_json(data["session"]["group_payload"])
-    ct_bytes = package.message_ciphertext
-    base = b"sample"
-    ct2 = bytes(b ^ 1 if i == 0 else b for i, b in enumerate(ct_bytes[: min(64, len(ct_bytes))]))
-
-    from qsbas.quantum_entropy import quantum_simulator_available
+    metrics = session_security_metrics(package.message_ciphertext)
+    analysis_data = dict(data)
+    analysis_data["decrypt_events"] = format_ist_list(
+        analysis_data["decrypt_events"],
+        "decrypted_at",
+    )
+    analysis_data["edits"] = format_ist_list(analysis_data.get("edits", []), "edited_at")
 
     return render_template(
         "chat_analysis.html",
         session_id=session_id,
-        data=data,
+        data=analysis_data,
         encryptor_panel=encryptor_panel,
         decryptor_panels=decryptor_panels,
         encryptor_name=encryptor["name"] if encryptor else data["session"]["encryptor_name"],
@@ -465,11 +563,8 @@ def chat_analysis(session_id: int):
         unique_decryptors=unique_decryptors,
         authorized_names=[p["name"] for p in participants],
         edit_window=EDIT_WINDOW_SECONDS,
-        npcr_val=npcr(ct_bytes[:64], ct2) if len(ct_bytes) >= 2 else 0,
-        uaci_val=uaci(ct_bytes[:64], ct2) if len(ct_bytes) >= 2 else 0,
-        entropy=entropy_bits_per_byte(ct_bytes),
-        nist_pass_rate=100.0,
-        quantum_ok=quantum_simulator_available(),
+        session_created_ist=format_ist(data["session"].get("created_at")),
+        **metrics,
     )
 
 

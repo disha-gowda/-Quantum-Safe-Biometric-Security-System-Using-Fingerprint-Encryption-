@@ -1,11 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Decrypt{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='biometric-upload.css') }}">
+{% endblock %}
 {% block content %}
 <section class="card">
   <h1>Group Decrypt</h1>
   <p class="lead">
-    Upload <strong>only your fingerprint</strong> (and iris/face if enrolled). The system identifies you in real time —
-    you cannot decrypt by using another authorized person's biometrics. No name field is required.
+    Upload <strong>only your biometrics</strong> (fingerprint required; add iris/face if you enrolled them).
+    The system identifies you in real time — you cannot decrypt with another person's biometrics.
   </p>
   <p class="hint bio-hint">Only valid <strong>fingerprint</strong>, <strong>iris</strong>, or <strong>face</strong> images are accepted. Screenshots and other files show <strong>Invalid input</strong>.</p>
 
@@ -22,22 +25,29 @@
     <div id="authorized-panel" class="authorized-panel" hidden>
       <h3>Authorized for this session</h3>
       <ul id="authorized-list" class="authorized-chips"></ul>
-      <p class="hint">Names are shown for reference only — identity is verified from your fingerprint.</p>
+      <p class="hint">Names are shown for reference only — identity is verified from your biometrics.</p>
     </div>
 
-    <label>Fingerprint<input type="file" name="fingerprint" accept="image/*" required></label>
-    <label>Iris (optional — if enrolled)<input type="file" name="iris" accept="image/*"></label>
-    <label>Face (optional — if enrolled)<input type="file" name="face" accept="image/*"></label>
+    {% with container_id='bio-decrypt', title='Your biometrics', name_prefix='' %}
+    {% include '_biometric_picker.html' %}
+    {% endwith %}
+
     <button type="submit" class="btn primary">Decrypt</button>
   </form>
 </section>
 
+<script src="{{ url_for('static', filename='biometric-picker.js') }}"></script>
 <script>
 (function () {
   const authorizedMap = {{ authorized_map | tojson }};
   const select = document.getElementById("session-select");
   const panel = document.getElementById("authorized-panel");
   const list = document.getElementById("authorized-list");
+
+  initBiometricPicker("bio-decrypt", "", {
+    maxSlots: 3,
+    initialSlots: [{ type: "fingerprint", required: true }],
+  });
 
   function renderAuthorized(sessionId) {
     list.innerHTML = "";
