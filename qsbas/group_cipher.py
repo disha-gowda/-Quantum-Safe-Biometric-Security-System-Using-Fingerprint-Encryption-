@@ -9,7 +9,7 @@ from typing import List, Tuple
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from qsbas.biometric_profile import BiometricProfile, profiles_match
+from qsbas.biometric_profile import BiometricProfile, identify_participant, profiles_match
 from qsbas.cipher import CipherSession, QSBACCipher
 from qsbas.constants import MAX_AUTHORIZED_USERS
 
@@ -79,6 +79,14 @@ def group_encrypt(plaintext: bytes, participants: List[BiometricProfile]) -> Gro
     return GroupEncryptedMessage(msg_ct, nonce, wraps)
 
 
+def _unwrap_and_decrypt(package: GroupEncryptedMessage, wrap: UserKeyWrap) -> bytes:
+    stored = BiometricProfile.from_json(wrap.profile_json)
+    cipher = QSBACCipher(minutiae=stored.cipher_minutiae)
+    session = CipherSession.from_json(wrap.wrapper_session_json)
+    master_key = cipher.decrypt(bytes.fromhex(wrap.wrapped_key), session)
+    return AESGCM(master_key).decrypt(package.message_nonce, package.message_ciphertext, None)
+
+
 def group_decrypt(
     package: GroupEncryptedMessage,
     probe: BiometricProfile,
@@ -99,8 +107,17 @@ def group_decrypt(
     if not matched:
         raise PermissionError("Fingerprint does not match enrolled profile for this name")
 
-    stored = BiometricProfile.from_json(matched.profile_json)
-    cipher = QSBACCipher(minutiae=stored.cipher_minutiae)
-    session = CipherSession.from_json(matched.wrapper_session_json)
-    master_key = cipher.decrypt(bytes.fromhex(matched.wrapped_key), session)
-    return AESGCM(master_key).decrypt(package.message_nonce, package.message_ciphertext, None)
+    return _unwrap_and_decrypt(package, matched)
+
+
+def group_decrypt_by_fingerprint(
+    package: GroupEncryptedMessage,
+    probe: BiometricProfile,
+    *,
+    encryptor_only: bool = False,
+) -> tuple[bytes, str]:
+    """Decrypt by fingerprint only; system identifies the authorized user."""
+    stored_profiles = [BiometricProfile.from_json(w.profile_json) for w in package.user_wraps]
+    identified = identify_participant(stored_profiles, probe, encryptor_only=encryptor_only)
+    wrap = next(w for w in package.user_wraps if w.name.strip().lower() == identified.name.strip().lower())
+    return _unwrap_and_decrypt(package, wrap), identified.name

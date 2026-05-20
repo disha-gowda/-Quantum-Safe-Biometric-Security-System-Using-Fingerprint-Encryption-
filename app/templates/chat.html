@@ -10,23 +10,30 @@
   <div class="chat-actions">
     <a class="btn" href="{{ url_for('main.session_edit', session_id=session_id) }}">Manage session</a>
     <a class="btn" href="{{ url_for('main.chat_analysis', session_id=session_id) }}">Dashboard</a>
-    <a class="btn" href="{{ url_for('main.decrypt_page') }}">Decrypt</a>
+    <a class="btn" href="{{ url_for('main.decrypt_page') }}">Decrypt message</a>
   </div>
 </section>
 
 <section class="card message-thread" id="message">
   <h2>Message</h2>
+  {% if message_plaintext %}
   <div class="message-bubble current">
-    <p>{{ data.session.current_plaintext }}</p>
+    <p>{{ message_plaintext }}</p>
+    <p class="hint">Decrypted by <strong>{{ decryptor_name }}</strong> (your session only — not stored on server).</p>
     {% if data.edits %}<span class="edited-tag">edited</span>{% endif %}
   </div>
-  {% for e in data.edits %}
-  <div class="edit-history instagram-style">
-    <p class="edit-label">Edited · {{ e.edited_at }}</p>
-    <p class="old-text"><s>{{ e.old_text }}</s></p>
-    <p class="new-text">{{ e.new_text }}</p>
+  {% else %}
+  <div class="message-bubble locked">
+    <p class="muted"><strong>Encrypted.</strong> Use <a href="{{ url_for('main.decrypt_page') }}">Decrypt</a> and upload <em>your</em> fingerprint only. The system identifies you automatically — you cannot decrypt as another authorized user.</p>
   </div>
-  {% endfor %}
+  {% endif %}
+  {% if data.edits %}
+  <ul class="edit-history">
+    {% for e in data.edits %}
+    <li>Message edited · {{ e.edited_at }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
 </section>
 
 <section class="card">
@@ -38,7 +45,7 @@
       <span class="avatar">{{ d.decryptor_name[0] }}</span>
       {{ d.decryptor_name }}
       <time>{{ d.decrypted_at }}</time>
-      <a class="link-small" href="{{ url_for('main.chat_analysis', session_id=session_id, decryptor=d.decryptor_name) }}">View analysis</a>
+      <a class="link-small" href="{{ url_for('main.chat_analysis', session_id=session_id) }}">View analysis</a>
     </li>
     {% endfor %}
   </ul>
@@ -50,11 +57,10 @@
 {% if editable %}
 <section class="card edit-panel">
   <h2>Edit encrypted message <span class="timer">({{ seconds_left }}s left)</span></h2>
-  <p class="hint">Only the encryptor can change the message body, within 5 minutes of encryption. Session settings are not time-limited — use <a href="{{ url_for('main.session_edit', session_id=session_id) }}">Manage session</a>.</p>
+  <p class="hint">Only the encryptor's fingerprint can change the message body, within 5 minutes of encryption.</p>
   <form method="post" action="{{ url_for('main.edit_message', session_id=session_id) }}" enctype="multipart/form-data" class="form">
-    <input type="hidden" name="encryptor_name" value="{{ data.session.encryptor_name }}">
-    <label>New message<textarea name="new_text" rows="3" required>{{ data.session.current_plaintext }}</textarea></label>
-    <label>Verify fingerprint<input type="file" name="fingerprint" accept="image/*" required></label>
+    <label>New message<textarea name="new_text" rows="3" required placeholder="Enter new message text"></textarea></label>
+    <label>Encryptor fingerprint (required)<input type="file" name="fingerprint" accept="image/*" required></label>
     <button type="submit" class="btn primary">Save message edit</button>
   </form>
 </section>

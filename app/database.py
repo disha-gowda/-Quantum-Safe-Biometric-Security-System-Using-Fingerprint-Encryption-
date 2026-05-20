@@ -79,7 +79,6 @@ def init_db() -> None:
 def save_group_session(
     label: str,
     encryptor_name: str,
-    plaintext: str,
     group_payload_json: str,
     fp_encryptor_path: str,
     participants: List[dict],
@@ -97,7 +96,7 @@ def save_group_session(
             (
                 label,
                 encryptor_name,
-                plaintext,
+                None,
                 group_payload_json,
                 fp_encryptor_path,
                 deadline.isoformat(),
@@ -186,20 +185,16 @@ def can_edit(session_id: int) -> bool:
     return datetime.utcnow() <= deadline
 
 
-def update_message(
-    session_id: int,
-    old_text: str,
-    new_text: str,
-    group_payload_json: str,
-) -> None:
+def update_message(session_id: int, group_payload_json: str) -> None:
+    """Re-encrypt message; never persist decrypted plaintext."""
     with get_connection() as conn:
         conn.execute(
-            "UPDATE sessions SET current_plaintext = ?, group_payload = ? WHERE id = ?",
-            (new_text, group_payload_json, session_id),
+            "UPDATE sessions SET current_plaintext = NULL, group_payload = ? WHERE id = ?",
+            (group_payload_json, session_id),
         )
         conn.execute(
             "INSERT INTO message_edits (session_id, old_text, new_text) VALUES (?, ?, ?)",
-            (session_id, old_text, new_text),
+            (session_id, "[encrypted]", "[encrypted]"),
         )
         conn.commit()
 
@@ -236,11 +231,11 @@ def _participant_profiles(session_id: int):
     return [BiometricProfile.from_json(p["profile_json"]) for p in rows]
 
 
-def reencrypt_session(session_id: int, profiles, group_payload_json: str, plaintext: str) -> None:
+def reencrypt_session(session_id: int, group_payload_json: str) -> None:
     with get_connection() as conn:
         conn.execute(
-            "UPDATE sessions SET current_plaintext = ?, group_payload = ? WHERE id = ?",
-            (plaintext, group_payload_json, session_id),
+            "UPDATE sessions SET current_plaintext = NULL, group_payload = ? WHERE id = ?",
+            (group_payload_json, session_id),
         )
         conn.commit()
 
@@ -270,7 +265,7 @@ def replace_participants(session_id: int, participant_meta: List[dict]) -> None:
         conn.commit()
 
 
-def add_session_decryptor(session_id: int, participant_meta: dict) -> None:
+def add_session_decryptor(session_id: int, participant_meta: dict, plaintext: str) -> None:
     from qsbas.biometric_profile import BiometricProfile
     from qsbas.group_cipher import group_encrypt
 
@@ -287,9 +282,8 @@ def add_session_decryptor(session_id: int, participant_meta: dict) -> None:
     profiles = _participant_profiles(session_id)
     new_profile = BiometricProfile.from_json(participant_meta["profile_json"])
     profiles.append(new_profile)
-    plaintext = row["current_plaintext"] or ""
     package = group_encrypt(plaintext.encode("utf-8"), profiles)
-    reencrypt_session(session_id, profiles, package.to_json(), plaintext)
+    reencrypt_session(session_id, package.to_json())
 
     all_meta = [
         {
@@ -317,7 +311,7 @@ def add_session_decryptor(session_id: int, participant_meta: dict) -> None:
     replace_participants(session_id, all_meta)
 
 
-def remove_session_decryptor(session_id: int, decryptor_name: str) -> None:
+def remove_session_decryptor(session_id: int, decryptor_name: str, plaintext: str) -> None:
     from qsbas.group_cipher import group_encrypt
 
     row = get_session(session_id)
@@ -335,9 +329,8 @@ def remove_session_decryptor(session_id: int, decryptor_name: str) -> None:
 
     remaining = [p for p in participants if p["name"].strip().lower() != target]
     profiles = [BiometricProfile.from_json(p["profile_json"]) for p in remaining]
-    plaintext = row["current_plaintext"] or ""
     package = group_encrypt(plaintext.encode("utf-8"), profiles)
-    reencrypt_session(session_id, profiles, package.to_json(), plaintext)
+    reencrypt_session(session_id, package.to_json())
 
     meta = [
         {
@@ -354,19 +347,29 @@ def remove_session_decryptor(session_id: int, decryptor_name: str) -> None:
     replace_participants(session_id, meta)
 
 
-def verify_encryptor(session_id: int, encryptor_name: str, fp_path: str) -> bool:
-    from qsbas.biometric_profile import BiometricProfile, build_profile, profiles_match
+def verify_encryptor_fingerprint(session_id: int, fp_path: str) -> bool:
+    """Real-time check: fingerprint must match the session encryptor only."""
+    from qsbas.biometric_profile import BiometricProfile, build_profile, identify_participant
 
+    row = get_session(session_id)
+    if not row:
+        return False
+    probe = build_profile("_verify_", fp_path)
+    profiles = [
+        BiometricProfile.from_json(p["profile_json"])
+        for p in get_participants(session_id)
+    ]
+    try:
+        identified = identify_participant(profiles, probe, encryptor_only=True)
+    except PermissionError:
+        return False
+    return identified.name.strip().lower() == row["encryptor_name"].strip().lower()
+
+
+def verify_encryptor(session_id: int, encryptor_name: str, fp_path: str) -> bool:
     row = get_session(session_id)
     if not row:
         return False
     if encryptor_name.strip().lower() != row["encryptor_name"].strip().lower():
         return False
-    probe = build_profile(encryptor_name, fp_path)
-    for p in get_participants(session_id):
-        if not p["is_encryptor"]:
-            continue
-        stored = BiometricProfile.from_json(p["profile_json"])
-        if profiles_match(stored, probe):
-            return True
-    return False
+    return verify_encryptor_fingerprint(session_id, fp_path)

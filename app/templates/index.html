@@ -3,7 +3,7 @@
 {% block content %}
 <section class="hero">
   <h1>Quantum-Safe Biometric Security System</h1>
-  <p class="lead">Group encryption for up to {{ max_users }} people · decrypt anytime · manage session anytime · edit encrypted message within 5 minutes.</p>
+  <p class="lead">Group encryption for up to {{ max_users }} people · fingerprint-only decrypt · chat gated by encryptor · message hidden until valid decrypt.</p>
   <div class="actions">
     <a class="btn primary" href="{{ url_for('main.encrypt_page') }}">Encrypt (Group)</a>
     <a class="btn" href="{{ url_for('main.decrypt_page') }}">Decrypt</a>
@@ -24,7 +24,7 @@
         <td>{{ s.encryptor_name }}</td>
         <td>{{ s.decrypt_count or 0 }}</td>
         <td>
-          <a href="{{ url_for('main.chat_page', session_id=s.id) }}">Chat</a> ·
+          <a href="{{ url_for('main.chat_unlock', session_id=s.id) }}">Chat</a> ·
           <a href="{{ url_for('main.chat_analysis', session_id=s.id) }}">Dashboard</a> ·
           <a href="{{ url_for('main.session_edit', session_id=s.id) }}">Manage</a>
         </td>

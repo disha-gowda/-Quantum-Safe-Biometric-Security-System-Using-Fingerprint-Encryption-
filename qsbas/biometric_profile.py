@@ -123,10 +123,8 @@ def _minutiae_spatial_ratio(stored: List[Minutia], probe: List[Minutia], toleran
     return hits / len(probe_pts)
 
 
-def profiles_match(stored: BiometricProfile, probe: BiometricProfile) -> bool:
-    if stored.name.strip().lower() != probe.name.strip().lower():
-        return False
-
+def biometric_features_match(stored: BiometricProfile, probe: BiometricProfile) -> bool:
+    """Compare fingerprint/multimodal features only (no name check)."""
     stored_fp = stored.fingerprint_minutiae[:MINUTIAE_COUNT]
     probe_fp = probe.fingerprint_minutiae[:MINUTIAE_COUNT]
 
@@ -147,3 +145,27 @@ def profiles_match(stored: BiometricProfile, probe: BiometricProfile) -> bool:
         return max(hash_ratio, cipher_ratio, spatial_ratio) >= BIOMETRIC_MATCH_RATIO
 
     return max(hash_ratio, spatial_ratio) >= BIOMETRIC_MATCH_RATIO
+
+
+def profiles_match(stored: BiometricProfile, probe: BiometricProfile) -> bool:
+    if stored.name.strip().lower() != probe.name.strip().lower():
+        return False
+    return biometric_features_match(stored, probe)
+
+
+def identify_participant(
+    stored_profiles: List[BiometricProfile],
+    probe: BiometricProfile,
+    *,
+    encryptor_only: bool = False,
+) -> BiometricProfile:
+    """Identify exactly one enrolled user from probe biometrics alone."""
+    pool = [p for p in stored_profiles if not encryptor_only or p.is_encryptor]
+    matches = [p for p in pool if biometric_features_match(p, probe)]
+    if not matches:
+        raise PermissionError("Fingerprint not recognized for this session")
+    if len(matches) > 1:
+        raise PermissionError(
+            "Fingerprint matches more than one enrolled user; re-enroll with distinct biometrics"
+        )
+    return matches[0]

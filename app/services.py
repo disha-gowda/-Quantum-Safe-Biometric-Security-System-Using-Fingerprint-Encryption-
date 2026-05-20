@@ -25,6 +25,15 @@ def save_upload(file: FileStorage, prefix: str) -> str:
     return str(path)
 
 
+def probe_from_fingerprint(
+    fp_file: FileStorage,
+    iris_file: Optional[FileStorage] = None,
+    face_file: Optional[FileStorage] = None,
+) -> tuple[BiometricProfile, dict]:
+    """Build a biometric probe from uploads only (no declared identity)."""
+    return profile_from_form("_probe_", fp_file, iris_file, face_file)
+
+
 def profile_from_form(
     name: str,
     fp_file: FileStorage,

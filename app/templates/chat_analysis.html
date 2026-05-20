@@ -26,8 +26,6 @@
 
     <nav class="dash-status" aria-label="Quick links">
 
-      <a href="{{ url_for('main.chat_page', session_id=session_id) }}#message" class="pill live" title="Open live session chat">LIVE SESSION</a>
-
       <a href="#quantum-info" class="pill quantum {{ 'ok' if quantum_ok else 'warn' }}" title="Quantum entropy source">
 
         {{ 'QUANTUM STABLE' if quantum_ok else 'CLASSICAL FALLBACK' }}
@@ -278,7 +276,7 @@
 
   <div class="dash-actions">
 
-    <a href="{{ url_for('main.chat_page', session_id=session_id) }}" class="dash-btn">BACK TO CHAT</a>
+    <a href="{{ url_for('main.chat_unlock', session_id=session_id) }}" class="dash-btn">SESSION CHAT</a>
 
     <a href="{{ url_for('main.decrypt_page') }}" class="dash-btn accent">DECRYPT FILE</a>
 

@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Unlock Chat #{{ session_id }}{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Verify session encryptor</h1>
+  <p class="lead">
+    Session <strong>#{{ session_id }}</strong> ({{ label }}) — created by <strong>{{ encryptor_name }}</strong>.
+    Upload the <strong>encryptor's fingerprint</strong> to open this chat. The message stays hidden until a valid authorized user decrypts with their own fingerprint.
+  </p>
+  <form method="post" enctype="multipart/form-data" class="form">
+    <label>Encryptor fingerprint<input type="file" name="fingerprint" accept="image/*" required></label>
+    <button type="submit" class="btn primary">Unlock chat</button>
+    <a class="btn" href="{{ url_for('main.index') }}">Cancel</a>
+  </form>
+</section>
+{% endblock %}

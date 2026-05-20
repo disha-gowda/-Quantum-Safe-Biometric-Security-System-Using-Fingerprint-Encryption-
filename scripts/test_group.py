@@ -8,7 +8,7 @@ sys.path.insert(0, str(ROOT))
 
 from qsbas.biometric_profile import build_profile
 from qsbas.constants import MINUTIAE_COUNT
-from qsbas.group_cipher import group_decrypt, group_encrypt
+from qsbas.group_cipher import group_decrypt_by_fingerprint, group_encrypt
 
 fp = str(ROOT / "data" / "sample_fingerprint.png")
 if not Path(fp).exists():
@@ -16,10 +16,11 @@ if not Path(fp).exists():
     sys.exit(1)
 
 alice = build_profile("Alice", fp, is_encryptor=True)
-bob = build_profile("Bob", fp)
 assert len(alice.cipher_minutiae) == MINUTIAE_COUNT
 
 msg = b"Group secret message"
-pkg = group_encrypt(msg, [alice, bob])
-plain = group_decrypt(pkg, bob)
-print("OK:", plain == msg, "users:", len(pkg.user_wraps))
+pkg = group_encrypt(msg, [alice])
+probe = build_profile("_probe_", fp)
+plain, name = group_decrypt_by_fingerprint(pkg, probe)
+assert plain == msg and name == "Alice"
+print("OK: fingerprint-only decrypt identified", name)

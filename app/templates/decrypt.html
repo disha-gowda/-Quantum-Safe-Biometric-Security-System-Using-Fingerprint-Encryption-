@@ -4,8 +4,8 @@
 <section class="card">
   <h1>Group Decrypt</h1>
   <p class="lead">
-    Up to {{ max_users }} people can decrypt each session — <strong>including the encryptor</strong>.
-    Decryption is available at any time. Use your enrolled name and fingerprint (and iris/face if enrolled).
+    Upload <strong>only your fingerprint</strong> (and iris/face if enrolled). The system identifies you in real time —
+    you cannot decrypt by using another authorized person's biometrics. No name field is required.
   </p>
   <p class="hint bio-hint">Only valid <strong>fingerprint</strong>, <strong>iris</strong>, or <strong>face</strong> images are accepted. Screenshots and other files show <strong>Invalid input</strong>.</p>
 
@@ -22,9 +22,9 @@
     <div id="authorized-panel" class="authorized-panel" hidden>
       <h3>Authorized for this session</h3>
       <ul id="authorized-list" class="authorized-chips"></ul>
+      <p class="hint">Names are shown for reference only — identity is verified from your fingerprint.</p>
     </div>
 
-    <label>Your enrolled name<input type="text" name="decryptor_name" id="decryptor-name" required placeholder="Must match enrollment"></label>
     <label>Fingerprint<input type="file" name="fingerprint" accept="image/*" required></label>
     <label>Iris (optional — if enrolled)<input type="file" name="iris" accept="image/*"></label>
     <label>Face (optional — if enrolled)<input type="file" name="face" accept="image/*"></label>
@@ -51,9 +51,6 @@
       const li = document.createElement("li");
       li.className = "chip" + (p.is_encryptor ? " encryptor" : "");
       li.textContent = p.name + (p.is_encryptor ? " (encryptor)" : "");
-      li.addEventListener("click", function () {
-        document.getElementById("decryptor-name").value = p.name;
-      });
       list.appendChild(li);
     });
   }
@@ -65,4 +62,3 @@
 })();
 </script>
 {% endblock %}
-

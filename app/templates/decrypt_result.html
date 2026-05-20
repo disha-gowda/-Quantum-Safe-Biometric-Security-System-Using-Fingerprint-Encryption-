@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Decrypted — Session #{{ session_id }}{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Decryption successful</h1>
+  <p class="lead">Recognized as <strong>{{ decryptor_name }}</strong> for session #{{ session_id }} ({{ label }}).</p>
+  <div class="message-bubble current">
+    <p>{{ message_plaintext }}</p>
+  </div>
+  <p class="hint">This text is shown only in your browser session and is not stored as plaintext on the server.</p>
+  <div class="actions">
+    {% if is_encryptor %}
+    <a class="btn primary" href="{{ url_for('main.chat_unlock', session_id=session_id) }}">Open session chat</a>
+    {% endif %}
+    <a class="btn" href="{{ url_for('main.decrypt_page') }}">Decrypt another</a>
+    <a class="btn" href="{{ url_for('main.index') }}">Home</a>
+  </div>
+</section>
+{% endblock %}
