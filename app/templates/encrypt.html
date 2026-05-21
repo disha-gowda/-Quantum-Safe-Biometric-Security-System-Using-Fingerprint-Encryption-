@@ -59,6 +59,19 @@
     <div class="bio-slots"></div>
     <button type="button" class="btn-add-bio">+ Add biometric</button>
     <div class="bio-type-pills"></div>
+    <template class="bio-slot-template">
+      <div class="bio-slot">
+        <select class="bio-type-select" aria-label="Biometric type">
+          <option value="fingerprint">Fingerprint</option>
+          <option value="iris">Iris / eye</option>
+          <option value="face">Face</option>
+        </select>
+        <div class="bio-file-wrap">
+          <input type="file" class="bio-file-input" accept="image/*">
+        </div>
+        <button type="button" class="btn-remove-bio" title="Remove">×</button>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -98,7 +111,7 @@
     const section = shellTpl.content.cloneNode(true).querySelector(".bio-upload-section");
     section.id = pickerId;
     host.appendChild(section);
-    initBiometricPicker(pickerId, "user" + slot + "_", {
+    initBiometricPickerOnElement(section, "user" + slot + "_", {
       maxSlots: 3,
       initialSlots: [{ type: "fingerprint", required: true }],
     });
@@ -114,7 +127,6 @@
     block.dataset.slot = String(slot);
     block.querySelector(".slot-num").textContent = String(activeSlots.length);
     wireNames(block, slot);
-    injectPicker(block, slot);
 
     block.querySelector(".btn-remove-decryptor").addEventListener("click", function () {
       const idx = activeSlots.indexOf(slot);
@@ -127,6 +139,7 @@
     });
 
     container.appendChild(block);
+    injectPicker(block, slot);
     updateSlotsInput();
   }
 

@@ -498,9 +498,6 @@ def edit_message(session_id: int):
 
 @bp.route("/chat/<int:session_id>/analysis")
 def chat_analysis(session_id: int):
-    if not _chat_unlocked(session_id):
-        return redirect(url_for("main.chat_unlock", session_id=session_id))
-
     data = chat_payload(session_id)
     if not data:
         flash("Session not found.")

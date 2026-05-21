@@ -94,6 +94,19 @@
     <div class="bio-slots"></div>
     <button type="button" class="btn-add-bio">+ Add biometric</button>
     <div class="bio-type-pills"></div>
+    <template class="bio-slot-template">
+      <div class="bio-slot">
+        <select class="bio-type-select" aria-label="Biometric type">
+          <option value="fingerprint">Fingerprint</option>
+          <option value="iris">Iris / eye</option>
+          <option value="face">Face</option>
+        </select>
+        <div class="bio-file-wrap">
+          <input type="file" class="bio-file-input" accept="image/*">
+        </div>
+        <button type="button" class="btn-remove-bio" title="Remove">×</button>
+      </div>
+    </template>
   </div>
 </template>
 

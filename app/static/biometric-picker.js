@@ -103,8 +103,7 @@
     updateAddButton(container);
   }
 
-  function initBiometricPicker(containerId, prefix, config) {
-    const container = document.getElementById(containerId);
+  function initBiometricPickerOnElement(container, prefix, config) {
     if (!container) return;
     if (container.dataset.pickerInit === "1") return;
     container.dataset.pickerInit = "1";
@@ -144,5 +143,14 @@
     refreshTypeOptions(container);
   }
 
+  function initBiometricPicker(containerId, prefix, config) {
+    const container =
+      typeof containerId === "string"
+        ? document.getElementById(containerId)
+        : containerId;
+    initBiometricPickerOnElement(container, prefix, config);
+  }
+
   global.initBiometricPicker = initBiometricPicker;
+  global.initBiometricPickerOnElement = initBiometricPickerOnElement;
 })(window);
