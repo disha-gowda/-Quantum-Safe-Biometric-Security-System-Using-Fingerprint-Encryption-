@@ -1,4 +1,14 @@
-"""Modules 7–10: permutation, rotation, diffusion, dynamic S-box."""
+"""
+QSBAC-SPN layers (Substitution–Permutation Network).
+
+Pipeline mapping (AES analogue → QSBAC-SPN):
+  Key schedule     → K_i = (F_i ⊕ Q_i ⊕ T_s) mod 256
+  ShiftRows        → dynamic permutation P_i
+  Rotate           → R_i = (F_i ⊕ Q_i ⊕ C_{i-1}) mod 8
+  S-box            → S_i = (Q_i ⊕ F_i ⊕ i) mod 256 (bijective dynamic S-box)
+  MixColumns       → nonlinear diffusion D_i
+  AddRoundKey      → final E_i with P_i, Q_i, C_{i-1}
+"""
 
 from __future__ import annotations
 
@@ -21,8 +31,9 @@ def inverse_permutation(data: List[int], order: List[int]) -> List[int]:
     return [data[inv[i] % n] & 0xFF for i in range(n)]
 
 
-def rotation_factor(features: int, chaotic: int, index: int) -> int:
-    return (features ^ chaotic ^ (index & 0xFF)) & 0x7
+def rotation_factor(features: int, chaotic: int, prev_cipher: int) -> int:
+    """R_i = (F_i ⊕ Q_i ⊕ C_{i-1}) mod 8."""
+    return (features ^ chaotic ^ (prev_cipher & 0xFF)) & 0x7
 
 
 def apply_rotation(data: List[int], rotations: List[int]) -> List[int]:

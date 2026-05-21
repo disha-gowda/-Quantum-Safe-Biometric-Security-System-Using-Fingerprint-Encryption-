@@ -1,10 +1,27 @@
-"""Modules 11 & 14: QSBAC encryption and decryption."""
+"""
+QSBAC-SPN: Quantum-Safe Biometric Adaptive Cipher (Substitution–Permutation Network).
+
+The framework introduces adaptive biometric and quantum-chaotic transformations
+for dynamic session-dependent encryption — not a claim of superiority over AES.
+
+SPN pipeline:
+  Plaintext → Dynamic Permutation → Adaptive Rotation → Dynamic S-Box
+           → Nonlinear Diffusion → Quantum-Biometric Key Mixing → Ciphertext
+
+Equations (mod 256 unless noted):
+  K_i = (F_i ⊕ Q_i ⊕ T_s)
+  P_i = (K_i + Q_i² + F_i × i) mod N
+  R_i = (F_i ⊕ Q_i ⊕ C_{i-1}) mod 8
+  S_i = (Q_i ⊕ F_i ⊕ i) mod 256
+  D_i = ((M_i ⊕ K_i) + (C_{i-1} ⊕ Q_i)) mod 256
+  E_i = (((D_i ⊕ S_i) + Q_i) ≪ R_i) ⊕ P_i ⊕ C_{i-1}
+"""
 
 from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from typing import List, Tuple
 
 import numpy as np
@@ -24,11 +41,13 @@ from qsbas.layers import (
     sbox_substitute,
 )
 from qsbas.quantum_entropy import quantum_initial_value
-from qsbas.utils import int_list_to_bytes, rotl8, rotr8, bytes_to_int_list
+from qsbas.utils import bytes_to_int_list, int_list_to_bytes, rotl8, rotr8
 
 
 @dataclass
 class CipherSession:
+    """Session state for QSBAC-SPN decrypt (permutation, rotations, entropy)."""
+
     timestamp: float
     timestamp_salt: int
     minutiae: List[dict]
@@ -47,8 +66,8 @@ class CipherSession:
         return cls(**data)
 
 
-class QSBACCipher:
-    """Quantum-Safe Biometric Adaptive Cipher."""
+class QSBACSPNCipher:
+    """Quantum-Safe Biometric Adaptive Cipher using an SPN structure."""
 
     def __init__(self, fingerprint_image: np.ndarray | None = None, minutiae: List[Minutia] | None = None):
         if minutiae is not None:
@@ -61,7 +80,7 @@ class QSBACCipher:
             raise ValueError("Provide fingerprint image or minutiae list")
 
     @classmethod
-    def from_image_path(cls, path: str) -> "QSBACCipher":
+    def from_image_path(cls, path: str) -> "QSBACSPNCipher":
         return cls(fingerprint_image=load_fingerprint(path))
 
     def _material(self, length: int, timestamp: float | None) -> Tuple[SessionMaterial, float]:
@@ -85,7 +104,11 @@ class QSBACCipher:
 
         permuted = apply_permutation(data, perm)
 
-        rotations = [rotation_factor(features[i], chaotic[i], i) for i in range(n)]
+        rotations: List[int] = []
+        prev_block = 0
+        for i in range(n):
+            rotations.append(rotation_factor(features[i], chaotic[i], prev_block))
+            prev_block = permuted[i] & 0xFF
 
         rotated = apply_rotation(permuted, rotations)
 
@@ -164,3 +187,7 @@ class QSBACCipher:
         permuted = inverse_rotation(rotated, rotations)
         plain = inverse_permutation(permuted, perm)
         return int_list_to_bytes(plain)
+
+
+# Backward-compatible alias used across the app and scripts.
+QSBACCipher = QSBACSPNCipher

@@ -18,7 +18,7 @@ def session_ciphertext_bars(ciphertext: bytes, bins: int = 24) -> list[int]:
 
 
 def session_security_metrics(ciphertext: bytes) -> dict:
-    """NPCR/UACI/entropy/NIST computed from this session's AES ciphertext."""
+    """NPCR/UACI/entropy/NIST computed from this session's QSBAC-SPN ciphertext."""
     ct = ciphertext or b""
     sample = ct[: min(512, len(ct))]
     if len(sample) >= 2:

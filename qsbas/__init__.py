@@ -1,5 +1,5 @@
-"""Quantum-Safe Biometric Adaptive Cipher (QSBAC)."""
+"""Quantum-Safe Biometric Adaptive Cipher (QSBAC-SPN)."""
 
-from qsbas.cipher import QSBACCipher, CipherSession
+from qsbas.cipher import CipherSession, QSBACSPNCipher, QSBACCipher
 
-__all__ = ["QSBACCipher", "CipherSession"]
+__all__ = ["QSBACSPNCipher", "QSBACCipher", "CipherSession"]

@@ -1,13 +1,15 @@
-"""Multi-user (5) encryption: AES message body + per-user QSBAC key wrapping."""
+"""
+Multi-user encryption: QSBAC-SPN full message encryption per authorized participant.
+
+Pipeline: Fingerprint → QSBAC-SPN → Ciphertext
+Access: live biometric match + enrolled profile → decrypt participant copy.
+"""
 
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import asdict, dataclass
-from typing import List, Tuple
-
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from typing import List
 
 from qsbas.biometric_profile import (
     BiometricProfile,
@@ -15,16 +17,21 @@ from qsbas.biometric_profile import (
     profiles_match,
     verify_decrypt_authorization,
 )
-from qsbas.cipher import CipherSession, QSBACCipher
+from qsbas.cipher import CipherSession, QSBACSPNCipher
 from qsbas.constants import MAX_AUTHORIZED_USERS
+
+# 12-byte marker stored in message_nonce (replaces AES-GCM IV field in JSON).
+SPN_ENGINE_MARKER = b"QSBAC-SPN\x00"
 
 
 @dataclass
 class UserKeyWrap:
+    """Per-user QSBAC-SPN ciphertext and session (JSON field names kept for DB compat)."""
+
     name: str
     is_encryptor: bool
     profile_json: str
-    wrapped_key: str
+    wrapped_key: str  # hex QSBAC-SPN ciphertext for this participant
     wrapper_session_json: str
 
     def to_dict(self) -> dict:
@@ -33,8 +40,8 @@ class UserKeyWrap:
 
 @dataclass
 class GroupEncryptedMessage:
-    message_ciphertext: bytes
-    message_nonce: bytes
+    message_ciphertext: bytes  # encryptor canonical ciphertext (metrics / display)
+    message_nonce: bytes  # engine marker, not an AES nonce
     user_wraps: List[UserKeyWrap]
 
     def to_json(self) -> str:
@@ -56,40 +63,49 @@ class GroupEncryptedMessage:
         )
 
 
-def _wrap_key_for_user(master_key: bytes, profile: BiometricProfile) -> Tuple[bytes, CipherSession]:
-    cipher = QSBACCipher(minutiae=profile.cipher_minutiae)
-    return cipher.encrypt(master_key)
+def _spn_encrypt_for_user(plaintext: bytes, profile: BiometricProfile) -> tuple[bytes, CipherSession]:
+    cipher = QSBACSPNCipher(minutiae=profile.cipher_minutiae)
+    return cipher.encrypt(plaintext)
+
+
+def _spn_decrypt_for_user(ciphertext_hex: str, session_json: str, profile: BiometricProfile) -> bytes:
+    cipher = QSBACSPNCipher(minutiae=profile.cipher_minutiae)
+    session = CipherSession.from_json(session_json)
+    return cipher.decrypt(bytes.fromhex(ciphertext_hex), session)
+
+
+def _encryptor_profile(participants: List[BiometricProfile]) -> BiometricProfile:
+    for profile in participants:
+        if profile.is_encryptor:
+            return profile
+    return participants[0]
 
 
 def group_encrypt(plaintext: bytes, participants: List[BiometricProfile]) -> GroupEncryptedMessage:
     if not participants or len(participants) > MAX_AUTHORIZED_USERS:
         raise ValueError(f"Provide 1–{MAX_AUTHORIZED_USERS} participants")
 
-    master_key = AESGCM.generate_key(bit_length=256)
-    nonce = os.urandom(12)
-    msg_ct = AESGCM(master_key).encrypt(nonce, plaintext, None)
+    encryptor = _encryptor_profile(participants)
+    primary_ct, _ = _spn_encrypt_for_user(plaintext, encryptor)
 
     wraps: List[UserKeyWrap] = []
     for profile in participants:
-        wrapped, session = _wrap_key_for_user(master_key, profile)
+        user_ct, session = _spn_encrypt_for_user(plaintext, profile)
         wraps.append(
             UserKeyWrap(
                 name=profile.name,
                 is_encryptor=profile.is_encryptor,
                 profile_json=profile.to_json(),
-                wrapped_key=wrapped.hex(),
+                wrapped_key=user_ct.hex(),
                 wrapper_session_json=session.to_json(),
             )
         )
-    return GroupEncryptedMessage(msg_ct, nonce, wraps)
+    return GroupEncryptedMessage(primary_ct, SPN_ENGINE_MARKER, wraps)
 
 
-def _unwrap_and_decrypt(package: GroupEncryptedMessage, wrap: UserKeyWrap) -> bytes:
+def _decrypt_user_wrap(wrap: UserKeyWrap) -> bytes:
     stored = BiometricProfile.from_json(wrap.profile_json)
-    cipher = QSBACCipher(minutiae=stored.cipher_minutiae)
-    session = CipherSession.from_json(wrap.wrapper_session_json)
-    master_key = cipher.decrypt(bytes.fromhex(wrap.wrapped_key), session)
-    return AESGCM(master_key).decrypt(package.message_nonce, package.message_ciphertext, None)
+    return _spn_decrypt_for_user(wrap.wrapped_key, wrap.wrapper_session_json, stored)
 
 
 def group_decrypt(
@@ -97,9 +113,7 @@ def group_decrypt(
     probe: BiometricProfile,
 ) -> bytes:
     probe_name = probe.name.strip().lower()
-    candidates = [
-        w for w in package.user_wraps if w.name.strip().lower() == probe_name
-    ]
+    candidates = [w for w in package.user_wraps if w.name.strip().lower() == probe_name]
     if not candidates:
         raise PermissionError("Name not authorized for this session")
 
@@ -112,7 +126,7 @@ def group_decrypt(
     if not matched:
         raise PermissionError("Fingerprint does not match enrolled profile for this name")
 
-    return _unwrap_and_decrypt(package, matched)
+    return _decrypt_user_wrap(matched)
 
 
 def group_decrypt_by_fingerprint(
@@ -132,7 +146,7 @@ def group_decrypt_by_fingerprint(
         if w.name.strip().lower() == identified.name.strip().lower()
     )
     try:
-        return _unwrap_and_decrypt(package, wrap), identified.name
+        return _decrypt_user_wrap(wrap), identified.name
     except Exception as exc:
         raise PermissionError(
             "Fingerprint does not match any authorized profile for this session"
