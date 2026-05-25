@@ -23,6 +23,7 @@ from app.database import (
     verify_encryptor_fingerprint,
 )
 from app.services import dashboard_biometric_panel, probe_from_fingerprint, profile_from_form, save_upload
+from app.benchmark_cache import get_cached, invalidate, run_and_cache
 from app.session_metrics import session_security_metrics
 from app.timefmt import format_ist, format_ist_list
 from qsbas.biometric_profile import BiometricProfile, build_profile
@@ -101,6 +102,7 @@ def encrypt_page():
             participant_meta,
             original_plaintext=plaintext,
         )
+        invalidate(session_id)
         session.pop(f"chat_unlock_{session_id}", None)
         session.pop(f"decrypted_{session_id}", None)
         flash(
@@ -485,6 +487,7 @@ def edit_message(session_id: int):
         profiles = [BiometricProfile.from_json(p["profile_json"]) for p in participants_db]
         package = group_encrypt(new_text.encode("utf-8"), profiles)
         update_message(session_id, package.to_json(), old_text, new_text)
+        invalidate(session_id)
         _clear_chat_access(session_id)
         flash(
             "Message updated and re-encrypted. Verify biometrics again to read the new content."
@@ -519,21 +522,44 @@ def chat_analysis(session_id: int):
             session_id=session_id,
         )
 
+    analysis_data = dict(data)
+    analysis_data["decrypt_events"] = format_ist_list(
+        analysis_data["decrypt_events"],
+        "decrypted_at",
+    )
+    analysis_data["edits"] = format_ist_list(analysis_data.get("edits", []), "edited_at")
+
     decryptor_panels: list[dict] = []
+    decrypt_events = analysis_data.get("decrypt_events", [])
     for p in participants:
         if p["is_encryptor"]:
             continue
         prof = BiometricProfile.from_json(p["profile_json"])
-        decryptor_panels.append(
-            dashboard_biometric_panel(
-                prof,
-                p["fp_path"],
-                "Authorized Decryptor",
-                p.get("iris_path"),
-                p.get("face_path"),
-                session_id=session_id,
-            )
+        pname = p["name"]
+        events_for_user = [e for e in decrypt_events if e.get("decryptor_name") == pname]
+        panel = dashboard_biometric_panel(
+            prof,
+            p["fp_path"],
+            "Authorized Decryptor",
+            p.get("iris_path"),
+            p.get("face_path"),
+            session_id=session_id,
         )
+        panel.update(
+            {
+                "slot": p.get("slot", "—"),
+                "role": "Authorized Decryptor",
+                "access_level": "BIOMETRIC-GATED",
+                "decrypt_count": len(events_for_user),
+                "last_access": events_for_user[-1]["decrypted_at"] if events_for_user else "Never",
+                "status": "ACTIVE" if events_for_user else "ENROLLED",
+                "iris_minutiae": len(prof.iris_minutiae),
+                "face_minutiae": len(prof.face_minutiae),
+                "fingerprint_minutiae": len(prof.fingerprint_minutiae),
+                "multimodal": bool(prof.iris_minutiae or prof.face_minutiae),
+            }
+        )
+        decryptor_panels.append(panel)
 
     unique_decryptors: list[str] = []
     for n in decrypt_names:
@@ -541,13 +567,8 @@ def chat_analysis(session_id: int):
             unique_decryptors.append(n)
 
     package = GroupEncryptedMessage.from_json(data["session"]["group_payload"])
+    run_and_cache(session_id, force=True)
     metrics = session_security_metrics(package.message_ciphertext)
-    analysis_data = dict(data)
-    analysis_data["decrypt_events"] = format_ist_list(
-        analysis_data["decrypt_events"],
-        "decrypted_at",
-    )
-    analysis_data["edits"] = format_ist_list(analysis_data.get("edits", []), "edited_at")
 
     return render_template(
         "chat_analysis.html",
@@ -579,4 +600,106 @@ def analysis_page():
 
 @bp.route("/api/health")
 def health():
-    return {"status": "ok", "system": "QSBAC", "max_users": MAX_AUTHORIZED_USERS}
+    return jsonify({"status": "ok", "system": "QSBAC", "max_users": MAX_AUTHORIZED_USERS})
+
+
+def _benchmark_or_404(session_id: int):
+    row = get_session(session_id)
+    if not row:
+        return None, (jsonify({"error": "Session not found"}), 404)
+    return run_and_cache(session_id), None
+
+
+@bp.route("/api/live_metrics/<int:session_id>")
+def api_live_metrics(session_id: int):
+    data, err = _benchmark_or_404(session_id)
+    if err:
+        return err
+    return jsonify(data)
+
+
+@bp.route("/api/benchmark_results/<int:session_id>")
+def api_benchmark_results(session_id: int):
+    data, err = _benchmark_or_404(session_id)
+    if err:
+        return err
+    return jsonify(
+        {
+            "session_id": session_id,
+            "comparison": data["comparison"],
+            "algorithms": data["algorithms"],
+            "elapsed_ms": data["elapsed_ms"],
+            "timestamp": data["timestamp"],
+        }
+    )
+
+
+@bp.route("/api/entropy_stream/<int:session_id>")
+def api_entropy_stream(session_id: int):
+    data, err = _benchmark_or_404(session_id)
+    if err:
+        return err
+    return jsonify(
+        {
+            "labels": data["comparison"]["labels"],
+            "entropy": data["comparison"]["entropy"],
+            "history": data.get("history", []),
+        }
+    )
+
+
+@bp.route("/api/telemetry/<int:session_id>")
+def api_telemetry(session_id: int):
+    data, err = _benchmark_or_404(session_id)
+    if err:
+        return err
+    payload = chat_payload(session_id)
+    primary = data.get("primary", {})
+    return jsonify(
+        {
+            "session_id": session_id,
+            "entropy": primary.get("entropy", 0),
+            "nist_pass_rate": primary.get("nist_pass_rate", 0),
+            "avalanche_ratio": primary.get("avalanche_ratio", 0),
+            "security_stress": primary.get("security_stress", 0),
+            "security_rating": primary.get("security_rating", "N/A"),
+            "qsbac_telemetry": data.get("qsbac_telemetry", {}),
+            "decrypt_events": len(payload.get("decrypt_events", [])) if payload else 0,
+            "attack_simulation": data.get("attack_simulation", {}),
+            "comparison": data["comparison"],
+        }
+    )
+
+
+@bp.route("/api/security_analysis/<int:session_id>")
+def api_security_analysis(session_id: int):
+    data, err = _benchmark_or_404(session_id)
+    if err:
+        return err
+    return jsonify(data.get("research", {}))
+
+
+@bp.route("/api/attack_simulation/<int:session_id>")
+def api_attack_simulation(session_id: int):
+    data, err = _benchmark_or_404(session_id)
+    if err:
+        return err
+    return jsonify(data.get("attack_simulation", {}))
+
+
+@bp.route("/api/sbox/<int:session_id>")
+def api_sbox(session_id: int):
+    data, err = _benchmark_or_404(session_id)
+    if err:
+        return err
+    return jsonify(data.get("sbox", {}))
+
+
+@bp.route("/api/benchmark_refresh/<int:session_id>", methods=["POST"])
+def api_benchmark_refresh(session_id: int):
+    row = get_session(session_id)
+    if not row:
+        return jsonify({"error": "Session not found"}), 404
+    invalidate(session_id)
+    data = run_and_cache(session_id, force=True)
+    return jsonify({"ok": True, "elapsed_ms": data["elapsed_ms"]})

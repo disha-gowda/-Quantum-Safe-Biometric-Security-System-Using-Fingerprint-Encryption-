@@ -1,275 +1,232 @@
 {% extends "base.html" %}
-
-{% block title %}QSBAC Analysis #{{ session_id }}{% endblock %}
-
+{% block title %}QSBAC Intelligence #{{ session_id }}{% endblock %}
 {% block main_class %}dashboard-main{% endblock %}
-
 {% block head %}
-
 <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
-
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+<script src="{{ url_for('static', filename='dashboard.js') }}" defer></script>
 {% endblock %}
 
 {% block content %}
+<div class="dashboard intel-soc" id="intel-dashboard" data-session-id="{{ session_id }}">
+  <div class="scan-line pulse-once" id="scan-line" aria-hidden="true"></div>
 
-<div class="dashboard">
-
-  <header class="dash-header">
-
+  <header class="dash-header soc-header">
     <div>
-
-      <h1>QSBAC DASHBOARD</h1>
-
-      <p class="dash-sub">SECURE SESSION #{{ session_id }} - {{ data.session.label }}</p>
-
+      <h1>QSBAC CRYPTOGRAPHIC INTELLIGENCE</h1>
+      <p class="dash-sub">LIVE TELEMETRY · SESSION #{{ session_id }} · {{ data.session.label }}</p>
+      <p class="live-pill" id="live-status">INITIALIZING…</p>
     </div>
-
-    <nav class="dash-status" aria-label="Quick links">
-
-      <a href="#telemetry" class="pill bit" title="Session ciphertext metrics">SESSION #{{ session_id }} METRICS</a>
-
-      <a href="#encryption-flow" class="pill bit" title="Biometric SPN encryption pipeline">QSBAC-SPN</a>
-
+    <nav class="dash-status">
+      <span class="pill live">LIVE BENCHMARK</span>
+      <span class="pill quantum ok">QUANTUM-SAFE</span>
+      <button type="button" class="pill bit btn-refresh" id="btn-refresh-bench">FORCE REFRESH</button>
     </nav>
-
   </header>
 
+  <section class="cyber-meters panel">
+    <div class="meter-card">
+      <div class="circular-meter" id="gauge-entropy"><span class="gauge-val">—</span></div>
+      <span>Entropy Monitor</span>
+    </div>
+    <div class="meter-card">
+      <div class="radar-pulse" id="pulse-radar"></div>
+      <span id="meter-bio">—</span>
+      <small>Biometric Status</small>
+    </div>
+    <div class="meter-card"><strong id="meter-key">—</strong><small>Adaptive Key</small></div>
+    <div class="meter-card"><strong id="meter-quantum">—</strong><small>Quantum Entropy</small></div>
+    <div class="meter-card"><strong id="meter-decrypts">0</strong><small>Decrypt Events</small></div>
+    <div class="meter-card protection-wrap">
+      <div class="protection-ring" id="protection-ring"><span id="mitigation-score">—</span></div>
+      <small>Mitigation Score</small>
+    </div>
+    <div class="meter-card"><strong id="quantum-indicator">—</strong><small>Quantum Resistance</small></div>
+  </section>
 
+  <section class="panel flow-animated" id="bio-pipeline">
+    <h2>Biometric → Cipher Pipeline</h2>
+    <div class="pipeline-flow">
+      <div class="flow-node">Fingerprint / Iris / Face</div>
+      <span class="flow-arrow">↓</span>
+      <div class="flow-node">Feature Extraction</div>
+      <span class="flow-arrow">↓</span>
+      <div class="flow-node">Session Feature Hash</div>
+      <span class="flow-arrow">↓</span>
+      <div class="flow-node active">Adaptive Key Generation</div>
+      <span class="flow-arrow">↓</span>
+      <div class="flow-node">Permutation</div>
+      <span class="flow-arrow">↓</span>
+      <div class="flow-node">Rotation</div>
+      <span class="flow-arrow">↓</span>
+      <div class="flow-node">Diffusion</div>
+      <span class="flow-arrow">↓</span>
+      <div class="flow-node">Dynamic S-Box</div>
+      <span class="flow-arrow">↓</span>
+      <div class="flow-node glow">Ciphertext Generation</div>
+    </div>
+  </section>
 
   <div class="dash-grid">
-
     <section class="panel bio-panel" id="bio-encryptor">
-
-      <h2>Biometric Acquisition - Encrypting Person</h2>
-
+      <h2>Biometric Acquisition — Encryptor</h2>
       {% if encryptor_panel %}
-
       <div class="bio-split">
-
         <div class="bio-visual">
-
-          <img src="data:image/png;base64,{{ encryptor_panel.image_b64 }}" alt="Encryptor fingerprint with 32 minutiae">
-
+          <img src="data:image/png;base64,{{ encryptor_panel.image_b64 }}" alt="Encryptor fingerprint">
         </div>
-
         <div class="bio-stats">
-
           <div class="stat"><span>Minutiae</span><strong>{{ encryptor_panel.minutiae_count }}</strong></div>
-
           <div class="stat"><span>Quality</span><strong>{{ encryptor_panel.quality }}%</strong></div>
-
           <div class="stat"><span>Name</span><strong>{{ encryptor_panel.name }}</strong></div>
-
-          <div class="stat"><span>Iris</span><strong>{{ "YES" if encryptor_panel.has_iris else "-" }}</strong></div>
-
-          <div class="stat"><span>Face</span><strong>{{ "YES" if encryptor_panel.has_face else "-" }}</strong></div>
-
-          {% if encryptor_panel.iris_b64 or encryptor_panel.face_b64 %}
-
-          <div class="multimodal-thumbs">
-
-            {% if encryptor_panel.iris_b64 %}
-
-            <figure><img src="data:image/png;base64,{{ encryptor_panel.iris_b64 }}" alt="Iris"><figcaption>Iris</figcaption></figure>
-
-            {% endif %}
-
-            {% if encryptor_panel.face_b64 %}
-
-            <figure><img src="data:image/png;base64,{{ encryptor_panel.face_b64 }}" alt="Face"><figcaption>Face</figcaption></figure>
-
-            {% endif %}
-
-          </div>
-
-          {% endif %}
-
-          <p class="hash-label">Biometric Hash (H) — 32 bytes</p>
-
-          <code class="hash-val" title="Session-bound 32-byte digest (hex)">{{ encryptor_panel.hash_hex }}</code>
-
+          <p class="hash-label">Session Hash (H)</p>
+          <code class="hash-val">{{ encryptor_panel.hash_hex }}</code>
         </div>
-
       </div>
-
       {% endif %}
-
     </section>
 
-
-
-    <section class="panel bio-panel" id="bio-decryptors">
-
+    <section class="panel bio-panel bio-panel-wide" id="bio-decryptors">
       <h2>Authorized Decryptors</h2>
-
       {% if decryptor_panels %}
-
-      <div class="decryptor-grid">
-
+      <div class="decryptor-grid detailed">
         {% for panel in decryptor_panels %}
-
-        <article class="decryptor-card">
-
-          <h3>{{ panel.name }}</h3>
-
-          <div class="bio-split compact">
-
+        <article class="decryptor-card detailed">
+          <header class="decryptor-head">
+            <h3>{{ panel.name }}</h3>
+            <span class="badge status-{{ panel.status|lower }}">{{ panel.status }}</span>
+          </header>
+          <div class="bio-split">
             <div class="bio-visual">
-
-              <img src="data:image/png;base64,{{ panel.image_b64 }}" alt="{{ panel.name }} fingerprint minutiae">
-
+              <img src="data:image/png;base64,{{ panel.image_b64 }}" alt="{{ panel.name }} fingerprint with minutiae">
             </div>
-
-            <div class="bio-stats">
-
-              <div class="stat"><span>Minutiae</span><strong>{{ panel.minutiae_count }}</strong></div>
-
+            <div class="bio-stats decryptor-meta">
+              <div class="stat"><span>Role</span><strong>{{ panel.role }}</strong></div>
+              <div class="stat"><span>Slot</span><strong>#{{ panel.slot }}</strong></div>
+              <div class="stat"><span>Access</span><strong>{{ panel.access_level }}</strong></div>
+              <div class="stat"><span>Minutiae (FP)</span><strong>{{ panel.fingerprint_minutiae }} / 32</strong></div>
+              <div class="stat"><span>Cipher Minutiae</span><strong>{{ panel.minutiae_count }}</strong></div>
               <div class="stat"><span>Quality</span><strong>{{ panel.quality }}%</strong></div>
-
+              <div class="stat"><span>Iris</span><strong>{% if panel.has_iris %}YES ({{ panel.iris_minutiae }}){% else %}—{% endif %}</strong></div>
+              <div class="stat"><span>Face</span><strong>{% if panel.has_face %}YES ({{ panel.face_minutiae }}){% else %}—{% endif %}</strong></div>
+              <div class="stat"><span>Multimodal</span><strong>{{ "ENABLED" if panel.multimodal else "FINGERPRINT ONLY" }}</strong></div>
+              <div class="stat"><span>Decrypt Count</span><strong>{{ panel.decrypt_count }}</strong></div>
+              <div class="stat"><span>Last Access</span><strong>{{ panel.last_access }}</strong></div>
+              {% if panel.iris_b64 or panel.face_b64 %}
+              <div class="multimodal-thumbs">
+                {% if panel.iris_b64 %}
+                <figure><img src="data:image/png;base64,{{ panel.iris_b64 }}" alt="Iris"><figcaption>Iris</figcaption></figure>
+                {% endif %}
+                {% if panel.face_b64 %}
+                <figure><img src="data:image/png;base64,{{ panel.face_b64 }}" alt="Face"><figcaption>Face</figcaption></figure>
+                {% endif %}
+              </div>
+              {% endif %}
+              <p class="hash-label">Session Biometric Hash (H)</p>
+              <code class="hash-val" title="Session-bound digest">{{ panel.hash_hex }}</code>
             </div>
-
           </div>
-
         </article>
-
         {% endfor %}
-
       </div>
-
       {% else %}
-
-      <p class="muted">No decryptors enrolled. Use <a href="{{ url_for('main.session_edit', session_id=session_id) }}">Edit session</a> to add decryptors.</p>
-
+      <p class="muted">No decryptors enrolled. Use <a href="{{ url_for('main.session_edit', session_id=session_id) }}">Manage session</a> to add decryptors.</p>
       {% endif %}
-
     </section>
 
+    <section class="panel telemetry-live" id="ciphertext-panel">
+      <h2>Live Ciphertext Telemetry</h2>
+      <div class="telemetry-grid live-tel">
+        <div class="tel-stat"><span>Ciphertext Size</span><strong id="tel-size">—</strong></div>
+        <div class="tel-stat"><span>Block Count</span><strong id="tel-blocks">—</strong></div>
+        <div class="tel-stat"><span>Key Length</span><strong id="tel-keylen">—</strong></div>
+        <div class="tel-stat"><span>SHA-256</span><strong id="tel-sha256" class="mono">—</strong></div>
+        <div class="tel-stat wide"><span>Hex Preview</span><code id="tel-hex" class="hash-val">—</code></div>
+        <div class="tel-stat"><span>Entropy</span><strong id="tel-entropy">—</strong></div>
+        <div class="tel-stat"><span>Histogram Uniformity</span><strong id="tel-uniformity">—</strong></div>
+        <div class="tel-stat"><span>Encrypt Time</span><strong id="tel-enc">—</strong></div>
+        <div class="tel-stat"><span>Decrypt Time</span><strong id="tel-dec">—</strong></div>
+        <div class="tel-stat"><span>Throughput</span><strong id="tel-throughput">—</strong></div>
+        <div class="tel-stat"><span>Avalanche (1-bit)</span><strong id="tel-avalanche">—</strong></div>
+        <div class="tel-stat"><span>Session</span><strong id="tel-session">—</strong></div>
+        <div class="tel-stat"><span>Security Rating</span><strong id="tel-rating" class="rating">—</strong></div>
+      </div>
+    </section>
 
+    <section class="panel sbox-panel">
+      <h2>Dynamic S-Box Matrix (16×16)</h2>
+      <p class="file-tag">Biometric + session adaptive · entropy: <span id="sbox-entropy">—</span></p>
+      <div class="sbox-grid" id="sbox-grid"></div>
+    </section>
+  </div>
+
+  <section class="charts-section">
+    <h2 class="section-title">Algorithm Comparison &amp; Benchmarking</h2>
+    <p class="chart-note">Grouped comparison charts — live data from AES, DES, Blowfish, ChaCha20, QSBAC. Auto-refresh every 4s.</p>
+    <div class="charts-grid comparison-layout">
+      <div class="chart-card wide hero-chart"><h3>Security Metrics Comparison</h3><canvas id="chart-security-grouped"></canvas></div>
+      <div class="chart-card wide hero-chart"><h3>Performance Benchmarks</h3><canvas id="chart-performance-grouped"></canvas></div>
+      <div class="chart-card wide"><h3>Entropy Distribution (Byte 0–31 bins)</h3><canvas id="chart-entropy-dist"></canvas></div>
+      <div class="chart-card wide"><h3>Avalanche Effect Analysis</h3><canvas id="chart-avalanche-lines"></canvas></div>
+      <div class="chart-card"><h3>Entropy</h3><canvas id="chart-entropy"></canvas></div>
+      <div class="chart-card"><h3>NPCR</h3><canvas id="chart-npcr"></canvas></div>
+      <div class="chart-card"><h3>UACI</h3><canvas id="chart-uaci"></canvas></div>
+      <div class="chart-card"><h3>NIST Pass Rate</h3><canvas id="chart-nist"></canvas></div>
+      <div class="chart-card"><h3>Encryption Time</h3><canvas id="chart-enc-time"></canvas></div>
+      <div class="chart-card"><h3>Decryption Time</h3><canvas id="chart-dec-time"></canvas></div>
+      <div class="chart-card"><h3>Throughput</h3><canvas id="chart-throughput"></canvas></div>
+      <div class="chart-card"><h3>Security Stress</h3><canvas id="chart-stress"></canvas></div>
+      <div class="chart-card wide"><h3>Security Intelligence Trend (Multi-Algorithm)</h3><canvas id="chart-stress-trend"></canvas></div>
+    </div>
+  </section>
+
+  <div class="dash-grid analysis-grid">
+    <section class="panel research-panel">
+      <h2>Live Experimental Analysis</h2>
+      <p class="research-winner-line">Weighted research winner: <strong id="research-winner">—</strong></p>
+      <p id="research-summary" class="summary-text"></p>
+      <div class="scoring-weights" id="scoring-weights"></div>
+      <h3>Weighted Composite Scores</h3>
+      <ul id="weighted-scores" class="rank-list"></ul>
+      <h3>QSBAC-Exclusive Metrics</h3>
+      <div id="qsbac-exclusive" class="telemetry-grid live-tel"></div>
+      <h3>Metric Rankings</h3>
+      <ul id="research-rankings" class="rank-list"></ul>
+      <h3>Dynamic Conclusions</h3>
+      <div id="research-conclusions" class="conclusions"></div>
+    </section>
+
+    <section class="panel attack-panel">
+      <h2>Attack Resistance Simulation</h2>
+      <table class="attack-table">
+        <thead><tr><th>Attack</th><th>Success %</th><th>Detection %</th><th>Protection %</th></tr></thead>
+        <tbody id="attack-tbody"></tbody>
+      </table>
+    </section>
 
     <section class="panel flow-panel" id="encryption-flow">
-
-      <h2>Adaptive Encryption Process</h2>
-
-      <p class="file-tag">Session #{{ session_id }} - {{ data.session.label }}</p>
-
-      <div class="pipeline">
-
-        <div class="pipe-step"><span>PERMUTATION</span></div>
-
-        <span class="pipe-arrow">-></span>
-
-        <div class="pipe-step"><span>ROTATION</span></div>
-
-        <span class="pipe-arrow">-></span>
-
-        <div class="pipe-step"><span>DIFFUSION</span></div>
-
-        <span class="pipe-arrow">-></span>
-
-        <div class="pipe-step"><span>S-BOX</span></div>
-
-      </div>
-
-      <ul class="authorized-list">
-
-        <li><strong>Authorized encryptor:</strong> {{ encryptor_name }}</li>
-
-      </ul>
-
-
-
-      <h3 class="section-sub">Decryption history</h3>
-
+      <h2>Session Activity</h2>
+      <p class="file-tag">Created {{ session_created_ist }}</p>
       {% if data.decrypt_events %}
-
       <table class="decrypt-table">
-
-        <thead>
-
-          <tr><th>Decryptor</th><th>Time</th></tr>
-
-        </thead>
-
+        <thead><tr><th>Decryptor</th><th>Time (IST)</th></tr></thead>
         <tbody>
-
           {% for d in data.decrypt_events %}
-
-          <tr>
-
-            <td>{{ d.decryptor_name }}</td>
-
-            <td><time>{{ d.decrypted_at }}</time></td>
-
-          </tr>
-
+          <tr><td>{{ d.decryptor_name }}</td><td>{{ d.decrypted_at }}</td></tr>
           {% endfor %}
-
         </tbody>
-
       </table>
-
       {% else %}
-
-      <p class="muted">No decryptions yet. Anyone authorized can decrypt at any time.</p>
-
+      <p class="muted">No decryptions logged yet.</p>
       {% endif %}
-
-
-
     </section>
-
-
-
-    <section class="panel telemetry-panel" id="telemetry">
-
-      <h2>System Telemetry &amp; Security</h2>
-
-      <p class="file-tag">Live metrics · session #{{ session_id }} </p>
-      <p class="cipher-sample"><span>First 32 bytes (hex preview):</span> <code>{{ ciphertext_hex_32 }}</code></p>
-
-      <div class="telemetry-grid">
-
-        <div class="tel-stat"><span>Avalanche (NPCR)</span><strong>{{ "%.2f"|format(npcr_val) }}%</strong></div>
-
-        <div class="tel-stat"><span>Entropy</span><strong>{{ "%.4f"|format(entropy) }} bits/byte</strong></div>
-
-        <div class="tel-stat"><span>UACI</span><strong>{{ "%.2f"|format(uaci_val) }}%</strong></div>
-
-        <div class="tel-stat"><span>NIST Pass</span><strong>{{ "%.0f"|format(nist_pass_rate) }}%</strong></div>
-
-      </div>
-
-      <div class="bar-chart">
-
-        {% for h in bar_heights %}
-
-        <div class="bar" style="height: {{ h }}%"></div>
-
-        {% endfor %}
-
-      </div>
-
-      <p class="auth-tag">SESSION CREATED: {{ session_created_ist }} · STRESS: {{ stress }}</p>
-
-    </section>
-
   </div>
-
-
 
   <div class="dash-actions">
-
     <a href="{{ url_for('main.chat_unlock', session_id=session_id) }}" class="dash-btn">SESSION CHAT</a>
-
-    <a href="{{ url_for('main.decrypt_page') }}" class="dash-btn accent">DECRYPT FILE</a>
-
-    <a href="{{ url_for('main.session_edit', session_id=session_id) }}" class="dash-btn">MANAGE SESSION</a>
-
-    <a href="{{ url_for('main.encrypt_page') }}" class="dash-btn">NEW ENCRYPT</a>
-
+    <a href="{{ url_for('main.decrypt_page') }}" class="dash-btn accent">DECRYPT</a>
+    <a href="{{ url_for('main.session_edit', session_id=session_id) }}" class="dash-btn">MANAGE</a>
+    <a href="{{ url_for('main.index') }}" class="dash-btn">HOME</a>
   </div>
-
 </div>
-
 {% endblock %}
-
