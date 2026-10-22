@@ -1,0 +1,34 @@
+{% if block %}
+<div class="bio-thumbs-grid analysis-grid face-analysis-thumbs">
+  <figure>
+    <img src="data:image/png;base64,{{ block.original_b64 }}" alt="Original face">
+    <figcaption>Original Face</figcaption>
+  </figure>
+  <figure>
+    <img src="data:image/png;base64,{{ block.detection_b64 }}" alt="Face detection">
+    <figcaption>Face Detection</figcaption>
+  </figure>
+  <figure>
+    <img src="data:image/png;base64,{{ block.overlay_b64 }}" alt="32 facial landmarks">
+    <figcaption>32 Facial Landmarks</figcaption>
+  </figure>
+</div>
+<p class="hash-label">{{ block.feature_label }}</p>
+{% if block.details %}
+<table class="landmark-table">
+  <thead><tr><th>#</th><th>Feature</th><th>X</th><th>Y</th><th>nx</th><th>ny</th></tr></thead>
+  <tbody>
+    {% for d in block.details %}
+    <tr>
+      <td>{{ d.index }}</td>
+      <td>{{ d.label }}</td>
+      <td>{{ d.x }}</td>
+      <td>{{ d.y }}</td>
+      <td>{{ d.nx }}</td>
+      <td>{{ d.ny }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endif %}

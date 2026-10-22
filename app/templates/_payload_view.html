@@ -1,0 +1,30 @@
+{% if content %}
+  {% if content.has_text %}
+  <p class="payload-text">{{ content.text }}</p>
+  {% endif %}
+  {% if content.has_file %}
+  <div class="payload-file">
+    <p class="payload-file-meta">
+      Document: <strong>{{ content.filename }}</strong>
+      ({{ content.mime or "file" }}{% if content.file_size %}, {{ content.file_size }} bytes{% endif %})
+    </p>
+    {% if content.is_image and content.token %}
+    <figure class="payload-preview">
+      <img src="{{ url_for('main.download_content', token=content.token) }}" alt="{{ content.filename }}">
+    </figure>
+    {% elif content.is_video and content.token %}
+    <video class="payload-preview" controls src="{{ url_for('main.download_content', token=content.token) }}"></video>
+    {% elif content.is_pdf and content.token %}
+    <iframe class="payload-preview payload-pdf" title="{{ content.filename }}" src="{{ url_for('main.download_content', token=content.token) }}"></iframe>
+    {% endif %}
+    {% if content.token %}
+    <p><a class="btn" href="{{ url_for('main.download_content', token=content.token, download=1) }}">Download {{ content.filename }}</a></p>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% if not content.has_text and not content.has_file %}
+  <p>{{ message_plaintext }}</p>
+  {% endif %}
+{% else %}
+  <p>{{ message_plaintext }}</p>
+{% endif %}

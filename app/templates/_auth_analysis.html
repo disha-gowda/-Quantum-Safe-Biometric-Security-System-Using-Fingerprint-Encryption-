@@ -1,0 +1,68 @@
+{% if auth_analysis %}
+<section class="bio-analysis-section">
+  <h2>BIOMETRIC ANALYSIS</h2>
+  <p class="hint">Match the enrolled factor(s): fingerprint, face, or both.</p>
+
+  <h3>FINGERPRINT ANALYSIS</h3>
+  {% if auth_analysis.fingerprint %}
+  <div class="analysis-grid">
+    <figure>
+      <img src="data:image/png;base64,{{ auth_analysis.fingerprint.original_b64 }}" alt="Original fingerprint">
+      <figcaption>Original Fingerprint</figcaption>
+    </figure>
+    <figure>
+      <img src="data:image/png;base64,{{ auth_analysis.fingerprint.preprocessed_b64 }}" alt="Preprocessed fingerprint">
+      <figcaption>Preprocessed Fingerprint</figcaption>
+    </figure>
+    <figure>
+      <img src="data:image/png;base64,{{ auth_analysis.fingerprint.overlay_b64 }}" alt="Fingerprint with 32 minutiae">
+      <figcaption>Fingerprint With 32 Minutiae Points</figcaption>
+    </figure>
+  </div>
+  <p><strong>Total Features:</strong> {{ auth_analysis.fingerprint.feature_label }}</p>
+  {% endif %}
+  <p>Fingerprint Match Score: <strong>{{ auth_analysis.fingerprint_score }}%</strong>
+    &nbsp; Threshold: {{ auth_analysis.fingerprint_threshold }}%
+    &nbsp; Result: <strong class="status-{{ auth_analysis.fingerprint_status|lower }}">{{ auth_analysis.fingerprint_status }}</strong></p>
+
+  <h3>FACE ANALYSIS</h3>
+  {% if auth_analysis.face %}
+  <div class="analysis-grid">
+    <figure>
+      <img src="data:image/png;base64,{{ auth_analysis.face.original_b64 }}" alt="Original face">
+      <figcaption>Original Face Image</figcaption>
+    </figure>
+    <figure>
+      <img src="data:image/png;base64,{{ auth_analysis.face.detection_b64 }}" alt="Face detection">
+      <figcaption>Face Detection Result</figcaption>
+    </figure>
+    <figure>
+      <img src="data:image/png;base64,{{ auth_analysis.face.overlay_b64 }}" alt="Face with 32 landmarks">
+      <figcaption>Face With 32 Selected Landmark Points</figcaption>
+    </figure>
+  </div>
+  <p><strong>Total Features:</strong> {{ auth_analysis.face.feature_label }}</p>
+  {% if auth_analysis.face.details %}
+  <table class="landmark-table">
+    <thead><tr><th>#</th><th>Feature</th><th>X</th><th>Y</th><th>nx</th><th>ny</th></tr></thead>
+    <tbody>
+      {% for d in auth_analysis.face.details %}
+      <tr>
+        <td>{{ d.index }}</td>
+        <td>{{ d.label }}</td>
+        <td>{{ d.x }}</td>
+        <td>{{ d.y }}</td>
+        <td>{{ d.nx }}</td>
+        <td>{{ d.ny }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  {% endif %}
+  <p>Face Match Score: <strong>{{ auth_analysis.face_score }}%</strong>
+    &nbsp; Threshold: {{ auth_analysis.face_threshold }}%
+    &nbsp; Result: <strong class="status-{{ auth_analysis.face_status|lower }}">{{ auth_analysis.face_status }}</strong></p>
+  <p>Final Authentication: <strong class="status-{{ auth_analysis.final_status|lower }}">{{ auth_analysis.final_status }}</strong></p>
+</section>
+{% endif %}

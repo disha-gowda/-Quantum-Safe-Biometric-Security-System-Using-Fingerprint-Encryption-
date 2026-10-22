@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Secure Chat #{{ session_id }}{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='decrypt-result.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='biometric-upload.css') }}">
+{% endblock %}
+{% block content %}
+<section class="card chat-header">
+  <div class="chat-meta">
+    <h1>{{ data.session.label }} <span class="badge">#{{ session_id }}</span></h1>
+    <p>Encryptor: <strong>{{ data.session.encryptor_name }}</strong> ·
+      Authorized: {% for p in data.participants %}{{ p.name }}{% if not loop.last %}, {% endif %}{% endfor %}</p>
+  </div>
+  <div class="chat-actions">
+    <a class="btn" href="{{ url_for('main.session_edit', session_id=session_id) }}">Manage session</a>
+    <a class="btn" href="{{ url_for('main.chat_analysis', session_id=session_id) }}">Dashboard</a>
+    <a class="btn" href="{{ url_for('main.decrypt_page') }}">Decrypt message</a>
+  </div>
+</section>
+
+<section class="card message-thread" id="message">
+  <h2>Message</h2>
+  {% if message_locked %}
+  <div class="message-bubble locked">
+    <p class="muted"><strong>Encrypted.</strong> Content is hidden until you verify encryptor biometrics.</p>
+    <p class="hint"><a class="btn primary" href="{{ url_for('main.chat_unlock', session_id=session_id) }}">Verify biometrics &amp; decrypt</a></p>
+  </div>
+  {% else %}
+  <div class="message-versions">
+    <article class="message-bubble version current">
+      <header>
+        <span class="version-label">Current</span>
+      </header>
+      {% include '_payload_view.html' %}
+      <p class="hint">Unlocked by <strong>{{ decryptor_name }}</strong> (browser session only).</p>
+    </article>
+
+    {% if original_message and original_message != message_plaintext %}
+    <article class="message-bubble version original">
+      <header>
+        <span class="version-label">Original</span>
+        <time>{{ session_created_ist }}</time>
+      </header>
+      <p>{{ original_message }}</p>
+    </article>
+    {% endif %}
+  </div>
+
+  {% if readable_edits %}
+  <section class="edit-timeline">
+    <h3>Edit history</h3>
+    {% for e in readable_edits %}
+    <div class="edit-entry">
+      <time>{{ e.edited_at }}</time>
+      <div class="edit-diff">
+        <p class="old-text"><span>Before:</span> {{ e.old_text }}</p>
+        <p class="new-text"><span>After:</span> {{ e.new_text }}</p>
+      </div>
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Who decrypted</h2>
+  {% if data.decrypt_events %}
+  <ul class="decrypt-list">
+    {% for d in data.decrypt_events %}
+    <li>
+      <span class="avatar">{{ d.decryptor_name[0] }}</span>
+      {{ d.decryptor_name }}
+      <time>{{ d.decrypted_at }}</time>
+      <a class="link-small" href="{{ url_for('main.chat_analysis', session_id=session_id) }}">View analysis</a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">No decrypt events yet.</p>
+  {% endif %}
+</section>
+
+{% if editable %}
+<section class="card edit-panel">
+  <h2>Edit message <span class="timer">({{ seconds_left }}s left)</span></h2>
+  <p class="hint">Re-encrypt with new text; confirm with your encryptor biometrics. Attached documents stay encrypted with the new text.</p>
+  <form method="post" action="{{ url_for('main.edit_message', session_id=session_id) }}" enctype="multipart/form-data" class="form" id="edit-form">
+    <label>New message<textarea name="new_text" rows="3" {% if not content or not content.has_file %}required{% endif %} placeholder="Enter new message text">{% if content and content.has_text %}{{ content.text }}{% elif not content %}{{ message_plaintext }}{% endif %}</textarea></label>
+    {% if content and content.has_file %}<p class="hint">Document kept: {{ content.filename }}</p>{% endif %}
+    {% with container_id='bio-edit', title='Confirm encryptor biometrics', name_prefix='encryptor_' %}
+    {% include '_biometric_picker.html' %}
+    {% endwith %}
+    <button type="submit" class="btn primary">Save message edit</button>
+  </form>
+</section>
+<script src="{{ url_for('static', filename='biometric-picker.js') }}"></script>
+<script>
+initBiometricPicker("bio-edit", "encryptor_", {
+  maxSlots: 2,
+  mode: "or",
+  requireAny: true,
+  requiredTypes: ["fingerprint", "face"],
+  faceLiveCapture: true,
+  hint: "Provide fingerprint, face, or both (same as encryption).",
+  initialSlots: [
+    { type: "fingerprint", required: false, liveCapture: true },
+    { type: "face", required: false, liveCapture: true }
+  ]
+});
+</script>
+{% else %}
+<section class="card edit-panel closed">
+  <h2>Edit message</h2>
+  <p class="muted">The 5-minute edit window has closed. Decryption still works anytime.</p>
+  <p class="muted">To manage decryptors or delete the session, use <a href="{{ url_for('main.session_edit', session_id=session_id) }}">Manage session</a>.</p>
+</section>
+{% endif %}
+{% endblock %}

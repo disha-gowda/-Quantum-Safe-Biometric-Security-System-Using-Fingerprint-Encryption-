@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% block title %}Encrypt{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='encrypt-form.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='biometric-upload.css') }}">
+{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Group Encrypt</h1>
+  <p class="lead">
+    Up to <strong>{{ max_users }} people total</strong> can decrypt — <strong>you (encryptor)</strong> are always included,
+    plus up to <strong>{{ max_users - 1 }}</strong> teammates via <strong>+</strong>.
+  </p>
+  <p class="hint bio-hint">
+    Enroll with <strong>fingerprint only</strong>, <strong>face only</strong>, or <strong>both</strong>.
+    Encrypt <strong>text</strong>, a <strong>document</strong> (photo, CSV, PDF, video), or <strong>text and document</strong>.
+    Decrypt uses the same enrolled factor(s). Decryptor face is <strong>upload only</strong>.
+  </p>
+
+  <form method="post" enctype="multipart/form-data" class="form" id="encrypt-form">
+    <input type="hidden" name="decryptor_slots" id="decryptor-slots" value="">
+    <label>Session label<input type="text" name="label" value="secure-chat"></label>
+    <fieldset class="payload-mode">
+      <legend>What to encrypt</legend>
+      <label class="radio-row"><input type="radio" name="payload_mode" value="text" checked> Text</label>
+      <label class="radio-row"><input type="radio" name="payload_mode" value="document"> Document (photo, CSV, PDF, or video)</label>
+      <label class="radio-row"><input type="radio" name="payload_mode" value="both"> Text and document</label>
+    </fieldset>
+    <label id="text-field">Message<textarea name="plaintext" rows="4" placeholder="Secret message..."></textarea></label>
+    <label id="doc-field" hidden>Document
+      <input type="file" name="document" accept=".png,.jpg,.jpeg,.gif,.webp,.bmp,.tif,.tiff,.csv,.tsv,.pdf,.mp4,.webm,.mov,.avi,.mkv,.mpeg,.mpg,image/*,video/*,application/pdf,text/csv">
+      <span class="hint">Max 12 MB. Photos, CSV, PDF, and videos are encrypted with the same QSBAC cipher as text.</span>
+    </label>
+
+    <fieldset class="user-block encryptor-block">
+      <legend>Encrypting person (you — can also decrypt)</legend>
+      <p class="hint">Enroll yourself with fingerprint, face, or both. You are decryptor #1 of {{ max_users }}.</p>
+      <label>Name<input type="text" name="encryptor_name" required placeholder="Your name"></label>
+      {% with container_id='bio-encryptor', title='Your biometrics', name_prefix='encryptor_' %}
+      {% include '_biometric_picker.html' %}
+      {% endwith %}
+    </fieldset>
+
+    <div class="decryptors-header">
+      <h2 class="section-title">Additional authorized decryptors (optional)</h2>
+      <button type="button" class="btn-add-decryptor" id="btn-add-decryptor" title="Add decryptor">
+        <span class="plus-icon">+</span> Add decryptor
+      </button>
+    </div>
+    <p class="hint" id="decryptor-hint">No extra decryptors yet. You alone can decrypt, or click + to add teammates (max {{ max_users - 1 }}).</p>
+    <div id="decryptors-container"></div>
+
+    <button type="submit" class="btn primary">Encrypt for group</button>
+  </form>
+</section>
+
+<template id="decryptor-block-template">
+  <fieldset class="user-block decryptor-block" data-slot="">
+    <legend class="decryptor-legend">Decryptor <span class="slot-num"></span></legend>
+    <button type="button" class="btn-remove-decryptor" title="Remove">×</button>
+    <label>Name<input type="text" class="input-name" placeholder="Team member name"></label>
+    <div class="bio-picker-host"></div>
+  </fieldset>
+</template>
+
+<template id="bio-picker-shell-template">
+  <div class="bio-upload-section" data-max-slots="2">
+    <h3>Biometrics</h3>
+    <p class="bio-upload-hint">Fingerprint and/or face. Decryptor face: upload only.</p>
+    <div class="bio-slots"></div>
+    <button type="button" class="btn-add-bio">+ Add biometric</button>
+    <div class="bio-type-pills"></div>
+    <template class="bio-slot-template">
+      <div class="bio-slot">
+        <select class="bio-type-select" aria-label="Biometric type">
+          <option value="fingerprint">Fingerprint</option>
+          <option value="face">Face</option>
+        </select>
+        <div class="bio-file-wrap">
+          <input type="file" class="bio-file-input" accept="image/*">
+        </div>
+        <button type="button" class="btn-remove-bio" title="Remove">×</button>
+      </div>
+    </template>
+  </div>
+</template>
+
+<script src="{{ url_for('static', filename='biometric-picker.js') }}"></script>
+<script>
+(function () {
+  const maxDecryptors = {{ max_users - 1 }};
+  const container = document.getElementById("decryptors-container");
+  const slotsInput = document.getElementById("decryptor-slots");
+  const addBtn = document.getElementById("btn-add-decryptor");
+  const hint = document.getElementById("decryptor-hint");
+  const template = document.getElementById("decryptor-block-template");
+  let nextSlot = 0;
+  const activeSlots = [];
+
+  initBiometricPicker("bio-encryptor", "encryptor_", {
+    maxSlots: 2,
+    mode: "or",
+    requireAny: true,
+    requiredTypes: ["fingerprint", "face"],
+    faceLiveCapture: true,
+    hint: "Provide fingerprint, face, or both. Choose Upload or Live Capture for each trait you use.",
+    initialSlots: [
+      { type: "fingerprint", required: false, liveCapture: true },
+      { type: "face", required: false, liveCapture: true }
+    ]
+  });
+
+  function updateSlotsInput() {
+    slotsInput.value = activeSlots.join(",");
+    hint.hidden = activeSlots.length > 0;
+    addBtn.disabled = activeSlots.length >= maxDecryptors;
+    addBtn.title = addBtn.disabled ? "Maximum decryptors reached" : "Add decryptor";
+  }
+
+  function wireNames(block, slot) {
+    block.querySelector(".input-name").name = "user" + slot + "_name";
+  }
+
+  function injectPicker(block, slot) {
+    const host = block.querySelector(".bio-picker-host");
+    const pickerId = "bio-decryptor-" + slot;
+    const shellTpl = document.getElementById("bio-picker-shell-template");
+    if (!shellTpl) return;
+    const section = shellTpl.content.cloneNode(true).querySelector(".bio-upload-section");
+    section.id = pickerId;
+    host.appendChild(section);
+    initBiometricPickerOnElement(section, "user" + slot + "_", {
+      maxSlots: 2,
+      mode: "or",
+      requireAny: true,
+      requiredTypes: ["fingerprint", "face"],
+      faceLiveCapture: false,
+      hint: "Decryptor: fingerprint (upload or live), face (upload only), or both.",
+      initialSlots: [
+        { type: "fingerprint", required: false, liveCapture: true },
+        { type: "face", required: false, liveCapture: false }
+      ]
+    });
+  }
+
+  function addDecryptor() {
+    if (activeSlots.length >= maxDecryptors) return;
+    nextSlot += 1;
+    const slot = nextSlot;
+    activeSlots.push(slot);
+
+    const block = template.content.cloneNode(true).querySelector("fieldset");
+    block.dataset.slot = String(slot);
+    block.querySelector(".slot-num").textContent = String(activeSlots.length);
+    wireNames(block, slot);
+
+    block.querySelector(".btn-remove-decryptor").addEventListener("click", function () {
+      const idx = activeSlots.indexOf(slot);
+      if (idx !== -1) activeSlots.splice(idx, 1);
+      block.remove();
+      container.querySelectorAll(".decryptor-block").forEach(function (el, i) {
+        el.querySelector(".slot-num").textContent = String(i + 1);
+      });
+      updateSlotsInput();
+    });
+
+    container.appendChild(block);
+    injectPicker(block, slot);
+    updateSlotsInput();
+  }
+
+  addBtn.addEventListener("click", addDecryptor);
+  updateSlotsInput();
+
+  const textField = document.getElementById("text-field");
+  const docField = document.getElementById("doc-field");
+  function syncPayloadMode() {
+    const mode = (document.querySelector("input[name='payload_mode']:checked") || {}).value || "text";
+    textField.hidden = mode === "document";
+    docField.hidden = mode === "text";
+  }
+  document.querySelectorAll("input[name='payload_mode']").forEach(function (el) {
+    el.addEventListener("change", syncPayloadMode);
+  });
+  syncPayloadMode();
+
+  document.getElementById("encrypt-form").addEventListener("submit", function (ev) {
+    const mode = (document.querySelector("input[name='payload_mode']:checked") || {}).value || "text";
+    const text = (document.querySelector("textarea[name='plaintext']") || {}).value || "";
+    const fileInput = document.querySelector("input[name='document']");
+    if ((mode === "text" || mode === "both") && !text.trim()) {
+      ev.preventDefault();
+      alert("Enter message text, or switch to Document-only encryption.");
+      return;
+    }
+    if ((mode === "document" || mode === "both") && !(fileInput && fileInput.files && fileInput.files.length)) {
+      ev.preventDefault();
+      alert("Upload a photo, CSV, PDF, or video, or switch to Text-only encryption.");
+    }
+  });
+})();
+</script>
+{% endblock %}

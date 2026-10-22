@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Decrypt{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='biometric-upload.css') }}">
+{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Group Decrypt</h1>
+  <p class="lead">
+    Provide the <strong>same factor(s) used at enrollment</strong>: fingerprint only, face only, or both.
+    For each trait you use, choose Upload <em>or</em> Live Capture.
+  </p>
+  <p class="hint bio-hint">If both fingerprint and face were enrolled, both must verify. If only one was enrolled, only that factor is required.</p>
+
+  <form method="post" enctype="multipart/form-data" class="form" id="decrypt-form">
+    <label>Session
+      <select name="session_id" id="session-select" required>
+        <option value="">— Select session —</option>
+        {% for s in sessions %}
+        <option value="{{ s.id }}">#{{ s.id }} — {{ s.label }} (encryptor: {{ s.encryptor_name }})</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <div id="authorized-panel" class="authorized-panel" hidden>
+      <h3>Authorized for this session</h3>
+      <ul id="authorized-list" class="authorized-chips"></ul>
+      <p class="hint">Names are shown for reference only — identity is verified from your biometrics.</p>
+    </div>
+
+    <div class="auth-status-panel">
+      <h3>AUTHENTICATION STATUS</h3>
+      <div class="auth-status-row"><span>Fingerprint</span><strong class="status-{{ (auth_status.fingerprint if auth_status else 'Pending')|lower }}">{{ auth_status.fingerprint if auth_status else "Pending" }}</strong></div>
+      <div class="auth-status-row"><span>Face</span><strong class="status-{{ (auth_status.face if auth_status else 'Pending')|lower }}">{{ auth_status.face if auth_status else "Pending" }}</strong></div>
+      <div class="auth-status-row"><span>Final Authentication</span><strong class="status-{{ (auth_status.final if auth_status else 'Pending')|lower }}">{{ auth_status.final if auth_status else "Pending" }}</strong></div>
+      <p class="hint">Match the enrolled factor(s): fingerprint, face, or both.</p>
+      {% if auth_status and auth_status.message %}<p class="hint">{{ auth_status.message }}</p>{% endif %}
+    </div>
+
+    {% with container_id='bio-decrypt', title='Your biometrics', name_prefix='' %}
+    {% include '_biometric_picker.html' %}
+    {% endwith %}
+
+    <button type="submit" class="btn primary">Decrypt File</button>
+  </form>
+  {% include '_auth_analysis.html' %}
+</section>
+
+<script src="{{ url_for('static', filename='biometric-picker.js') }}"></script>
+<script>
+(function () {
+  const authorizedMap = {{ authorized_map | tojson }};
+  const select = document.getElementById("session-select");
+  const panel = document.getElementById("authorized-panel");
+  const list = document.getElementById("authorized-list");
+
+  initBiometricPicker("bio-decrypt", "", {
+    maxSlots: 2,
+    mode: "or",
+    requireAny: true,
+    requiredTypes: ["fingerprint", "face"],
+    faceLiveCapture: true,
+    hint: "Provide fingerprint, face, or both — matching what was enrolled for this session.",
+    initialSlots: [
+      { type: "fingerprint", required: false, liveCapture: true },
+      { type: "face", required: false, liveCapture: true }
+    ]
+  });
+
+  function renderAuthorized(sessionId) {
+    list.innerHTML = "";
+    const people = authorizedMap[sessionId] || authorizedMap[String(sessionId)] || [];
+    if (!people.length) {
+      panel.hidden = true;
+      return;
+    }
+    panel.hidden = false;
+    people.forEach(function (p) {
+      const li = document.createElement("li");
+      li.className = "chip" + (p.is_encryptor ? " encryptor" : "");
+      li.textContent = p.name + (p.is_encryptor ? " (encryptor)" : "");
+      list.appendChild(li);
+    });
+  }
+
+  select.addEventListener("change", function () {
+    if (select.value) renderAuthorized(parseInt(select.value, 10));
+    else panel.hidden = true;
+  });
+})();
+</script>
+{% endblock %}
